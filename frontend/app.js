@@ -4,7 +4,7 @@
  */
 
 // ============== Configuration ==============
-const API_BASE = '';
+const API_BASE = 'https://api.schedulelink.tech';
 let stripePublishableKey = '';
 
 // ============== State ==============
