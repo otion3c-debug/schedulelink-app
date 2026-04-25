@@ -4,7 +4,7 @@
  */
 
 // ============== Configuration ==============
-const API_BASE = 'https://api.schedulelink.tech';
+const API_BASE = 'https://schedulelink-app.onrender.com';
 let stripePublishableKey = '';
 
 // ============== State ==============
