@@ -260,7 +260,7 @@ function renderRegister() {
                     </div>
                     <div class="form-group">
                         <label class="form-label">Username</label>
-                        <input type="text" name="username" class="form-input" pattern="[a-zA-Z0-9_-]+" required
+                        <input type="text" name="username" class="form-input" pattern="[a-zA-Z0-9_\-]+" required
                                placeholder="your-booking-url">
                         <p class="form-help">Your booking page will be: schedulelink.com/book/<strong>username</strong></p>
                     </div>
