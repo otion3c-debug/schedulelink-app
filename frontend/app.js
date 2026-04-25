@@ -141,6 +141,11 @@ function render() {
         app.innerHTML = renderLogin();
     } else if (route === '/register') {
         app.innerHTML = renderRegister();
+    } else if (route === '/forgot-password') {
+        app.innerHTML = renderForgotPassword();
+    } else if (route.startsWith('/reset-password')) {
+        const token = new URLSearchParams(window.location.hash.split('?')[1] || '').get('token') || '';
+        app.innerHTML = renderResetPassword(token);
     } else if (route === '/dashboard') {
         renderDashboard(app);
     } else if (route === '/settings') {
@@ -260,6 +265,9 @@ function renderLogin() {
                     </div>
                 </div>
                 <div class="auth-footer">
+                    <a href="#/forgot-password">Forgot your password?</a>
+                </div>
+                <div class="auth-footer">
                     Don't have an account? <a href="#/register">Create one free</a>
                 </div>
             </div>
@@ -355,6 +363,206 @@ function renderRegister() {
             </div>
         </div>
     `;
+}
+
+function renderForgotPassword() {
+    return `
+        <div class="auth-page">
+            <div class="auth-card">
+                <div class="auth-brand">
+                    <a href="#/" class="auth-brand-logo">
+                        <div class="auth-brand-icon">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                                <rect x="3" y="4" width="18" height="18" rx="3" stroke="#e8956a" stroke-width="1.75"/>
+                                <path d="M3 10h18" stroke="#e8956a" stroke-width="1.75"/>
+                                <path d="M8 2v4M16 2v4" stroke="#e8956a" stroke-width="1.75" stroke-linecap="round"/>
+                                <circle cx="8" cy="14.5" r="1.5" fill="#e8956a"/>
+                                <circle cx="12" cy="14.5" r="1.5" fill="#e8956a"/>
+                                <circle cx="16" cy="14.5" r="1.5" fill="#e8956a"/>
+                            </svg>
+                        </div>
+                    </a>
+                    <h1 class="auth-welcome">Reset your password</h1>
+                    <p class="auth-tagline">Enter your email and we'll send you a reset link</p>
+                </div>
+                <div id="forgot-success" class="alert-success hidden" style="margin-bottom: 1.5rem; text-align: center;">
+                    <span id="forgot-success-text"></span>
+                </div>
+                <div id="forgot-error" class="alert-error hidden" style="margin-bottom: 1.5rem;">
+                    <span id="forgot-error-text"></span>
+                </div>
+                <form id="forgot-form" onsubmit="handleForgotPassword(event)">
+                    <div class="form-group">
+                        <label class="form-label">
+                            <span class="label-icon">&#128231;</span> Email address
+                        </label>
+                        <input type="email" name="email" class="form-input" placeholder="you@example.com" required autofocus>
+                    </div>
+                    <button type="submit" class="btn-primary" id="forgot-btn">
+                        <span>Send Reset Link</span>
+                    </button>
+                </form>
+                <div class="auth-footer">
+                    Remember your password? <a href="#/login">Sign in</a>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function renderResetPassword(token) {
+    if (!token) {
+        return `
+            <div class="auth-page">
+                <div class="auth-card">
+                    <div class="auth-brand">
+                        <a href="#/" class="auth-brand-logo">
+                            <div class="auth-brand-icon">
+                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                                    <rect x="3" y="4" width="18" height="18" rx="3" stroke="#e8956a" stroke-width="1.75"/>
+                                    <path d="M3 10h18" stroke="#e8956a" stroke-width="1.75"/>
+                                    <path d="M8 2v4M16 2v4" stroke="#e8956a" stroke-width="1.75" stroke-linecap="round"/>
+                                    <circle cx="8" cy="14.5" r="1.5" fill="#e8956a"/>
+                                    <circle cx="12" cy="14.5" r="1.5" fill="#e8956a"/>
+                                    <circle cx="16" cy="14.5" r="1.5" fill="#e8956a"/>
+                                </svg>
+                            </div>
+                        </a>
+                        <h1 class="auth-welcome">Invalid link</h1>
+                        <p class="auth-tagline">This password reset link is invalid or has expired.</p>
+                    </div>
+                    <div class="auth-footer">
+                        <a href="#/forgot-password">Request a new reset link</a>
+                    </div>
+                    <div class="auth-footer">
+                        <a href="#/login">Back to sign in</a>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    return `
+        <div class="auth-page">
+            <div class="auth-card">
+                <div class="auth-brand">
+                    <a href="#/" class="auth-brand-logo">
+                        <div class="auth-brand-icon">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                                <rect x="3" y="4" width="18" height="18" rx="3" stroke="#e8956a" stroke-width="1.75"/>
+                                <path d="M3 10h18" stroke="#e8956a" stroke-width="1.75"/>
+                                <path d="M8 2v4M16 2v4" stroke="#e8956a" stroke-width="1.75" stroke-linecap="round"/>
+                                <circle cx="8" cy="14.5" r="1.5" fill="#e8956a"/>
+                                <circle cx="12" cy="14.5" r="1.5" fill="#e8956a"/>
+                                <circle cx="16" cy="14.5" r="1.5" fill="#e8956a"/>
+                            </svg>
+                        </div>
+                    </a>
+                    <h1 class="auth-welcome">Set a new password</h1>
+                    <p class="auth-tagline">Enter your new password below</p>
+                </div>
+                <div id="reset-error" class="alert-error hidden" style="margin-bottom: 1.5rem;">
+                    <span id="reset-error-text"></span>
+                </div>
+                <div id="reset-success" class="alert-success hidden" style="margin-bottom: 1.5rem; text-align: center;">
+                    <span id="reset-success-text"></span>
+                </div>
+                <form id="reset-form" onsubmit="handleResetPassword(event, '${token}')">
+                    <div class="form-group">
+                        <label class="form-label">
+                            <span class="label-icon">&#128274;</span> New Password
+                        </label>
+                        <input type="password" name="password" class="form-input" minlength="8"
+                               placeholder="At least 8 characters" required autofocus>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">
+                            <span class="label-icon">&#128274;</span> Confirm Password
+                        </label>
+                        <input type="password" name="password_confirm" class="form-input" minlength="8"
+                               placeholder="Repeat your password" required>
+                    </div>
+                    <button type="submit" class="btn-primary" id="reset-btn">
+                        <span>Reset Password</span>
+                    </button>
+                </form>
+                <div class="auth-footer">
+                    <a href="#/login">Back to sign in</a>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+async function handleForgotPassword(event) {
+    event.preventDefault();
+    const form = event.target;
+    const btn = document.getElementById('forgot-btn');
+    const errorDiv = document.getElementById('forgot-error');
+    const successDiv = document.getElementById('forgot-success');
+
+    btn.disabled = true;
+    btn.querySelector('span').textContent = 'Sending...';
+    errorDiv.classList.add('hidden');
+    successDiv.classList.add('hidden');
+
+    try {
+        await api('/api/auth/forgot-password', {
+            method: 'POST',
+            body: JSON.stringify({ email: form.email.value })
+        });
+
+        // Always show success to avoid email enumeration
+        document.getElementById('forgot-success-text').textContent =
+            'Check your email — we\'ve sent you a reset link.';
+        successDiv.classList.remove('hidden');
+        form.classList.add('hidden');
+    } catch (e) {
+        document.getElementById('forgot-error-text').textContent = e.message;
+        errorDiv.classList.remove('hidden');
+        btn.disabled = false;
+        btn.querySelector('span').textContent = 'Send Reset Link';
+    }
+}
+
+async function handleResetPassword(event, token) {
+    event.preventDefault();
+    const form = event.target;
+    const btn = document.getElementById('reset-btn');
+    const errorDiv = document.getElementById('reset-error');
+    const successDiv = document.getElementById('reset-success');
+
+    const password = form.password.value;
+    const passwordConfirm = form.password_confirm.value;
+
+    if (password !== passwordConfirm) {
+        document.getElementById('reset-error-text').textContent = 'Passwords do not match.';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.querySelector('span').textContent = 'Resetting...';
+    errorDiv.classList.add('hidden');
+
+    try {
+        await api('/api/auth/reset-password', {
+            method: 'POST',
+            body: JSON.stringify({ token, password })
+        });
+
+        document.getElementById('reset-success-text').textContent =
+            'Your password has been reset! Redirecting to sign in...';
+        successDiv.classList.remove('hidden');
+        form.classList.add('hidden');
+
+        setTimeout(() => navigate('#/login'), 2000);
+    } catch (e) {
+        document.getElementById('reset-error-text').textContent = e.message;
+        errorDiv.classList.remove('hidden');
+        btn.disabled = false;
+        btn.querySelector('span').textContent = 'Reset Password';
+    }
 }
 
 async function renderDashboard(app) {

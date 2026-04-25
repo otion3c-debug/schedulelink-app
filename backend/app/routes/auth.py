@@ -1,12 +1,20 @@
-"""Authentication routes: register, login."""
+"""Authentication routes: register, login, forgot password, reset password."""
 
-from fastapi import APIRouter, HTTPException, status
+import secrets
+from datetime import datetime, timedelta, timezone
+
+from fastapi import APIRouter, HTTPException, status, Depends
+from pydantic import BaseModel
 from sqlite3 import IntegrityError
 
 from ..auth import hash_password, verify_password, create_access_token, get_current_user
 from ..database import get_db, dict_from_row, seed_working_hours
-from ..models import UserRegister, UserLogin, Token, UserProfile
-from fastapi import Depends
+from ..models import (
+    UserRegister, UserLogin, Token, UserProfile,
+    ForgotPasswordRequest, ResetPasswordRequest, MessageResponse
+)
+from ..services.emailer import send_password_reset_email
+from ..config import get_settings
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -96,3 +104,101 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         google_connected=current_user["google_refresh_token"] is not None,
         created_at=current_user["created_at"]
     )
+
+
+@router.post("/forgot-password", response_model=MessageResponse)
+async def forgot_password(data: ForgotPasswordRequest):
+    """Send a password reset email to the user."""
+    with get_db() as conn:
+        user = conn.execute(
+            "SELECT * FROM users WHERE email = ?",
+            (data.email,)
+        ).fetchone()
+
+        if not user:
+            # Don't reveal whether the email exists — still return success
+            return MessageResponse(
+                message="If an account with that email exists, we sent a reset link."
+            )
+
+        user_dict = dict_from_row(user)
+
+        # Generate a cryptographically secure random token
+        raw_token = secrets.token_urlsafe(32)
+        token_hash = hash_password(raw_token)
+
+        # Token expires in 1 hour
+        expires_at = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+
+        # Store hashed token in DB
+        conn.execute(
+            """
+            INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+            VALUES (?, ?, ?)
+            """,
+            (user_dict["id"], token_hash, expires_at)
+        )
+        conn.commit()
+
+        # Build reset link
+        reset_link = f"https://schedulelink.tech/app.html#/reset-password?token={raw_token}"
+
+        # Send email
+        await send_password_reset_email(
+            client_email=user_dict["email"],
+            client_name=user_dict["full_name"],
+            reset_link=reset_link
+        )
+
+        return MessageResponse(
+            message="If an account with that email exists, we sent a reset link."
+        )
+
+
+@router.post("/reset-password", response_model=MessageResponse)
+async def reset_password(data: ResetPasswordRequest):
+    """Reset password using a valid reset token."""
+    with get_db() as conn:
+        # Find all valid (non-used, non-expired) tokens
+        rows = conn.execute(
+            """
+            SELECT id, user_id, token_hash, expires_at
+            FROM password_reset_tokens
+            WHERE used = 0 AND expires_at > datetime('now')
+            """
+        ).fetchall()
+
+        found = False
+        found_token_id = None
+        found_user_id = None
+        for row in rows:
+            if verify_password(data.token, row["token_hash"]):
+                found = True
+                found_user_id = row["user_id"]
+                found_token_id = row["id"]
+                break
+
+        if not found:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired reset token. Please request a new one."
+            )
+
+        # Update user's password
+        new_hash = hash_password(data.password)
+        conn.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?",
+            (new_hash, found_user_id)
+        )
+
+        # Mark token as used
+        conn.execute(
+            "UPDATE password_reset_tokens SET used = 1 WHERE id = ?",
+            (found_token_id,)
+        )
+
+        conn.commit()
+
+        return MessageResponse(
+            message="Your password has been reset successfully. You can now sign in."
+        )

@@ -64,6 +64,16 @@ CREATE TABLE IF NOT EXISTS google_tokens (
     token_expiry DATETIME
 );
 
+-- Password reset tokens
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL,
+    expires_at DATETIME NOT NULL,
+    used INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_bookings_host_id ON bookings(host_id);
 CREATE INDEX IF NOT EXISTS idx_bookings_time ON bookings(booking_time);

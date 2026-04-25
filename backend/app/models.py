@@ -150,6 +150,17 @@ class MessageResponse(BaseModel):
     message: str
 
 
+class ForgotPasswordRequest(BaseModel):
+    """Forgot password request."""
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    """Reset password request."""
+    token: str
+    password: str = Field(min_length=8, max_length=100)
+
+
 class ErrorResponse(BaseModel):
     """Error response."""
     detail: str

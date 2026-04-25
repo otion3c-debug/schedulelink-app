@@ -319,6 +319,56 @@ Original Time: {formatted_time}
     )
 
 
+async def send_password_reset_email(
+    client_email: str,
+    client_name: str,
+    reset_link: str
+):
+    """Send password reset email to user."""
+    content = f"""
+        <p style="margin: 0 0 16px 0;">Hi <strong style="color: #f8fafc;">{client_name}</strong>,</p>
+        
+        <p style="margin: 0 0 24px 0;">We received a request to reset your ScheduleLink password.</p>
+        
+        <p style="margin: 0 0 24px 0;">Click the button below to set a new password. This link expires in <strong style="color: #f8fafc;">1 hour</strong>.</p>
+        
+        <p style="text-align: center; margin: 0 0 32px 0;">
+            <a href="{reset_link}" style="display: inline-block; background: #3b82f6; color: #ffffff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600;">Reset Password</a>
+        </p>
+        
+        <p style="margin: 0 0 16px 0; color: #94a3b8; font-size: 14px;">
+            If you didn't request a password reset, you can safely ignore this email. Your password won't be changed.
+        </p>
+        
+        <p style="margin: 0; color: #64748b; font-size: 13px;">
+            This link will expire in 1 hour. If you need help, contact us anytime.
+        </p>
+    """
+    
+    html = get_html_template("Reset Your Password", content)
+    
+    plain = f"""
+Hi {client_name},
+
+We received a request to reset your ScheduleLink password.
+
+Click the link below to set a new password. This link expires in 1 hour.
+
+{reset_link}
+
+If you didn't request a password reset, you can safely ignore this email.
+
+This link expires in 1 hour.
+"""
+    
+    await send_email(
+        to=client_email,
+        subject="Reset Your ScheduleLink Password",
+        html_content=html,
+        plain_content=plain
+    )
+
+
 async def send_reminder_email(
     client_email: str,
     client_name: str,
