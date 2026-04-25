@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""
-    email_from: str = "ScheduleLink <noreply@schedulelink.com>"
+    email_from: str = "i.samson.pots@gmail.com"
     
     # Free tier limits
     free_bookings_per_month: int = 5
