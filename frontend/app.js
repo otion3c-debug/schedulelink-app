@@ -208,30 +208,59 @@ function renderLanding() {
 function renderLogin() {
     return `
         <div class="auth-page">
-            <div class="auth-card card fade-in">
-                <h1 class="auth-title">
-                    <a href="#/" class="logo"><span>Schedule</span>Link</a>
-                </h1>
-                <h2 style="text-align: center; margin-bottom: 1.5rem;">Welcome back</h2>
-                
-                <div id="login-error" class="alert alert-error hidden"></div>
-                
+            <div class="auth-card">
+                <div class="auth-brand">
+                    <a href="#/" class="auth-brand-logo">
+                        <div class="auth-brand-icon">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                                <rect x="3" y="4" width="18" height="18" rx="3" stroke="#e8956a" stroke-width="1.75"/>
+                                <path d="M3 10h18" stroke="#e8956a" stroke-width="1.75"/>
+                                <path d="M8 2v4M16 2v4" stroke="#e8956a" stroke-width="1.75" stroke-linecap="round"/>
+                                <circle cx="8" cy="14.5" r="1.5" fill="#e8956a"/>
+                                <circle cx="12" cy="14.5" r="1.5" fill="#e8956a"/>
+                                <circle cx="16" cy="14.5" r="1.5" fill="#e8956a"/>
+                            </svg>
+                        </div>
+                    </a>
+                    <h1 class="auth-welcome">Welcome back</h1>
+                    <p class="auth-tagline">Sign in to manage your bookings</p>
+                </div>
+                <div id="login-error" class="alert-error hidden">
+                    <span style="font-size:1.1rem;">&#9888;</span>
+                    <span id="login-error-text"></span>
+                </div>
                 <form id="login-form" onsubmit="handleLogin(event)">
                     <div class="form-group">
-                        <label class="form-label">Email</label>
-                        <input type="email" name="email" class="form-input" required autofocus>
+                        <label class="form-label">
+                            <span class="label-icon">&#128231;</span> Email address
+                        </label>
+                        <input type="email" name="email" class="form-input" placeholder="you@example.com" required autofocus>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Password</label>
-                        <input type="password" name="password" class="form-input" required>
+                        <label class="form-label">
+                            <span class="label-icon">&#128274;</span> Password
+                        </label>
+                        <input type="password" name="password" class="form-input" placeholder="Your password" required>
                     </div>
-                    <button type="submit" class="btn btn-primary btn-block" id="login-btn">
-                        Sign In
+                    <button type="submit" class="btn-primary" id="login-btn">
+                        <span>Sign In</span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                            <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
                     </button>
                 </form>
-                
+                <div class="auth-trust">
+                    <div class="auth-trust-item">
+                        <span class="trust-icon">&#128274;</span>
+                        <span>Secure sign-in</span>
+                    </div>
+                    <div class="auth-trust-item">
+                        <span class="trust-icon">&#128171;</span>
+                        <span>Your data is safe</span>
+                    </div>
+                </div>
                 <div class="auth-footer">
-                    Don't have an account? <a href="#/register">Sign up</a>
+                    Don't have an account? <a href="#/register">Create one free</a>
                 </div>
             </div>
         </div>
@@ -241,39 +270,85 @@ function renderLogin() {
 function renderRegister() {
     return `
         <div class="auth-page">
-            <div class="auth-card card fade-in">
-                <h1 class="auth-title">
-                    <a href="#/" class="logo"><span>Schedule</span>Link</a>
-                </h1>
-                <h2 style="text-align: center; margin-bottom: 1.5rem;">Create your account</h2>
-                
-                <div id="register-error" class="alert alert-error hidden"></div>
-                
+            <div class="auth-card">
+                <div class="auth-brand">
+                    <a href="#/" class="auth-brand-logo">
+                        <div class="auth-brand-icon">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                                <rect x="3" y="4" width="18" height="18" rx="3" stroke="#e8956a" stroke-width="1.75"/>
+                                <path d="M3 10h18" stroke="#e8956a" stroke-width="1.75"/>
+                                <path d="M8 2v4M16 2v4" stroke="#e8956a" stroke-width="1.75" stroke-linecap="round"/>
+                                <circle cx="8" cy="14.5" r="1.5" fill="#e8956a"/>
+                                <circle cx="12" cy="14.5" r="1.5" fill="#e8956a"/>
+                                <circle cx="16" cy="14.5" r="1.5" fill="#e8956a"/>
+                            </svg>
+                        </div>
+                    </a>
+                    <h1 class="auth-welcome">Get started free</h1>
+                    <p class="auth-tagline">Create your booking page in under 2 minutes</p>
+                </div>
+                <div class="auth-features">
+                    <div class="auth-feature-item">
+                        <span class="feature-check">&#10003;</span>
+                        <span>Unlimited booking slots</span>
+                    </div>
+                    <div class="auth-feature-item">
+                        <span class="feature-check">&#10003;</span>
+                        <span>Automatic email confirmations</span>
+                    </div>
+                    <div class="auth-feature-item">
+                        <span class="feature-check">&#10003;</span>
+                        <span>Google Calendar sync</span>
+                    </div>
+                </div>
+                <div id="register-error" class="alert-error hidden">
+                    <span style="font-size:1.1rem;">&#9888;</span>
+                    <span id="register-error-text"></span>
+                </div>
                 <form id="register-form" onsubmit="handleRegister(event)">
                     <div class="form-group">
-                        <label class="form-label">Full Name</label>
-                        <input type="text" name="full_name" class="form-input" required autofocus>
+                        <label class="form-label">
+                            <span class="label-icon">&#128100;</span> Full Name
+                        </label>
+                        <input type="text" name="full_name" class="form-input" placeholder="Sarah Johnson" required autofocus>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Email</label>
-                        <input type="email" name="email" class="form-input" required>
+                        <label class="form-label">
+                            <span class="label-icon">&#128231;</span> Email address
+                        </label>
+                        <input type="email" name="email" class="form-input" placeholder="sarah@example.com" required>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Username</label>
-                        <input type="text" name="username" class="form-input" pattern="[a-zA-Z0-9_\-]+" required
-                               placeholder="your-booking-url">
-                        <p class="form-help">Your booking page will be: schedulelink.com/book/<strong>username</strong></p>
+                        <label class="form-label">
+                            <span class="label-icon">&#128187;</span> Username
+                        </label>
+                        <input type="text" name="username" class="form-input" pattern="[a-zA-Z0-9_-]+" required
+                               placeholder="sarah-j">
+                        <p class="form-help">Your booking page: <strong>schedulelink.tech/book/<span id="username-preview">sarah-j</span></strong></p>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Password</label>
-                        <input type="password" name="password" class="form-input" minlength="8" required>
-                        <p class="form-help">At least 8 characters</p>
+                        <label class="form-label">
+                            <span class="label-icon">&#128274;</span> Password
+                        </label>
+                        <input type="password" name="password" class="form-input" minlength="8" placeholder="At least 8 characters" required>
                     </div>
-                    <button type="submit" class="btn btn-primary btn-block" id="register-btn">
-                        Create Account
+                    <button type="submit" class="btn-primary" id="register-btn">
+                        <span>Create Free Account</span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                            <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
                     </button>
                 </form>
-                
+                <div class="auth-trust">
+                    <div class="auth-trust-item">
+                        <span class="trust-icon">&#9989;</span>
+                        <span>Free to start</span>
+                    </div>
+                    <div class="auth-trust-item">
+                        <span class="trust-icon">&#128274;</span>
+                        <span>No credit card needed</span>
+                    </div>
+                </div>
                 <div class="auth-footer">
                     Already have an account? <a href="#/login">Sign in</a>
                 </div>
@@ -682,16 +757,16 @@ async function handleLogin(event) {
     const errorDiv = document.getElementById('login-error');
     
     btn.disabled = true;
-    btn.textContent = 'Signing in...';
+    btn.querySelector('span').textContent = 'Signing in...';
     errorDiv.classList.add('hidden');
     
     try {
         await login(form.email.value, form.password.value);
     } catch (e) {
-        errorDiv.textContent = e.message;
+        document.getElementById('login-error-text').textContent = e.message;
         errorDiv.classList.remove('hidden');
         btn.disabled = false;
-        btn.textContent = 'Sign In';
+        btn.querySelector('span').textContent = 'Sign In';
     }
 }
 
@@ -702,7 +777,7 @@ async function handleRegister(event) {
     const errorDiv = document.getElementById('register-error');
     
     btn.disabled = true;
-    btn.textContent = 'Creating account...';
+    btn.querySelector('span').textContent = 'Creating account...';
     errorDiv.classList.add('hidden');
     
     try {
@@ -713,10 +788,10 @@ async function handleRegister(event) {
             form.username.value
         );
     } catch (e) {
-        errorDiv.textContent = e.message;
+        document.getElementById('register-error-text').textContent = e.message;
         errorDiv.classList.remove('hidden');
         btn.disabled = false;
-        btn.textContent = 'Create Account';
+        btn.querySelector('span').textContent = 'Create Free Account';
     }
 }
 
