@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book a Meeting - ScheduleLink</title>
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📅</text></svg>">
+    <style>
+        .booking-container {
+            min-height: 100vh;
+            padding: 2rem 1rem;
+        }
+        .booking-card {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        .step { display: none; }
+        .step.active { display: block; }
+        .calendar-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .calendar-header {
+            text-align: center;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            padding: 0.5rem 0;
+        }
+        .calendar-day {
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: var(--radius-sm);
+            font-size: 0.875rem;
+            cursor: pointer;
+            background: var(--bg-tertiary);
+            border: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        .calendar-day:hover:not(.disabled):not(.empty) {
+            border-color: var(--accent);
+        }
+        .calendar-day.selected {
+            background: var(--accent);
+            color: white;
+        }
+        .calendar-day.today {
+            border-color: var(--accent-light);
+        }
+        .calendar-day.disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+        .calendar-day.empty {
+            background: transparent;
+            cursor: default;
+        }
+        .time-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.75rem;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        @media (max-width: 480px) {
+            .time-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        .time-slot {
+            padding: 0.875rem;
+            text-align: center;
+            background: var(--bg-tertiary);
+            border: 2px solid transparent;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+        .time-slot:hover {
+            border-color: var(--accent);
+        }
+        .time-slot.selected {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+        .booking-summary {
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .booking-summary-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+        }
+        .booking-summary-label {
+            color: var(--text-muted);
+        }
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+            cursor: pointer;
+        }
+        .back-link:hover {
+            color: var(--text-primary);
+        }
+    </style>
+</head>
+<body>
+    <div class="booking-container">
+        <div class="booking-card">
+            <!-- Loading State -->
+            <div id="loading" class="card text-center" style="padding: 3rem;">
+                <div class="spinner" style="margin: 0 auto;"></div>
+                <p class="text-muted mt-2">Loading...</p>
+            </div>
+            
+            <!-- Error State -->
+            <div id="error" class="card text-center hidden" style="padding: 3rem;">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">😕</div>
+                <h2>User Not Found</h2>
+                <p class="text-muted">This booking page doesn't exist.</p>
+            </div>
+            
+            <!-- Main Booking Flow -->
+            <div id="booking-flow" class="hidden">
+                <!-- Header -->
+                <div class="text-center mb-4">
+                    <div class="booking-avatar">👤</div>
+                    <h1 id="host-name" class="booking-host-name">Loading...</h1>
+                    <p id="meeting-info" class="text-muted"></p>
+                </div>
+                
+                <!-- Step 1: Select Date -->
+                <div id="step-date" class="step active">
+                    <div class="card">
+                        <h3 class="mb-3">Select a Date</h3>
+                        
+                        <div class="calendar-nav">
+                            <button class="btn btn-secondary btn-sm" onclick="prevMonth()">←</button>
+                            <strong id="calendar-month">April 2024</strong>
+                            <button class="btn btn-secondary btn-sm" onclick="nextMonth()">→</button>
+                        </div>
+                        
+                        <div class="calendar-grid">
+                            <div class="calendar-header">Mon</div>
+                            <div class="calendar-header">Tue</div>
+                            <div class="calendar-header">Wed</div>
+                            <div class="calendar-header">Thu</div>
+                            <div class="calendar-header">Fri</div>
+                            <div class="calendar-header">Sat</div>
+                            <div class="calendar-header">Sun</div>
+                        </div>
+                        <div id="calendar-days" class="calendar-grid"></div>
+                    </div>
+                </div>
+                
+                <!-- Step 2: Select Time -->
+                <div id="step-time" class="step">
+                    <div class="card">
+                        <div class="back-link" onclick="showStep('date')">
+                            ← Back to calendar
+                        </div>
+                        
+                        <h3 class="mb-1">Select a Time</h3>
+                        <p id="selected-date-display" class="text-muted mb-3"></p>
+                        
+                        <div id="time-slots-loading" class="text-center" style="padding: 2rem;">
+                            <div class="spinner" style="margin: 0 auto;"></div>
+                        </div>
+                        
+                        <div id="time-slots-container" class="hidden">
+                            <div id="time-slots" class="time-grid"></div>
+                            <div id="no-slots" class="text-center hidden" style="padding: 2rem;">
+                                <p class="text-muted">No available times on this date.</p>
+                                <button class="btn btn-secondary mt-2" onclick="showStep('date')">Choose another date</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Step 3: Enter Details -->
+                <div id="step-details" class="step">
+                    <div class="card">
+                        <div class="back-link" onclick="showStep('time')">
+                            ← Back to times
+                        </div>
+                        
+                        <h3 class="mb-3">Enter Your Details</h3>
+                        
+                        <div class="booking-summary">
+                            <div class="booking-summary-row">
+                                <span class="booking-summary-label">Date</span>
+                                <span id="summary-date">-</span>
+                            </div>
+                            <div class="booking-summary-row">
+                                <span class="booking-summary-label">Time</span>
+                                <span id="summary-time">-</span>
+                            </div>
+                            <div class="booking-summary-row">
+                                <span class="booking-summary-label">Duration</span>
+                                <span id="summary-duration">-</span>
+                            </div>
+                        </div>
+                        
+                        <div id="booking-error" class="alert alert-error hidden"></div>
+                        
+                        <form id="booking-form" onsubmit="handleBooking(event)">
+                            <div class="form-group">
+                                <label class="form-label">Your Name *</label>
+                                <input type="text" name="client_name" class="form-input" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Email Address *</label>
+                                <input type="email" name="client_email" class="form-input" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Phone Number</label>
+                                <input type="tel" name="client_phone" class="form-input">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Notes</label>
+                                <textarea name="client_notes" class="form-textarea" placeholder="Anything you'd like us to know?"></textarea>
+                            </div>
+                            <button type="submit" id="book-btn" class="btn btn-primary btn-block btn-lg">
+                                Confirm Booking
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                
+                <!-- Step 4: Confirmation -->
+                <div id="step-confirm" class="step">
+                    <div class="card text-center" style="padding: 2rem;">
+                        <div class="success-checkmark">✓</div>
+                        <h2 class="mb-2">Booking Confirmed!</h2>
+                        <p class="text-muted mb-3">
+                            A confirmation email has been sent to your inbox.
+                        </p>
+                        
+                        <div class="booking-summary" style="text-align: left;">
+                            <div class="booking-summary-row">
+                                <span class="booking-summary-label">Host</span>
+                                <span id="confirm-host">-</span>
+                            </div>
+                            <div class="booking-summary-row">
+                                <span class="booking-summary-label">Date & Time</span>
+                                <span id="confirm-datetime">-</span>
+                            </div>
+                            <div class="booking-summary-row">
+                                <span class="booking-summary-label">Duration</span>
+                                <span id="confirm-duration">-</span>
+                            </div>
+                        </div>
+                        
+                        <p class="text-muted" style="font-size: 0.875rem;">
+                            Need to make changes? Check your email for the cancellation link.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Footer -->
+            <div class="text-center mt-4">
+                <p class="text-dim" style="font-size: 0.875rem;">
+                    Powered by <a href="/" style="color: var(--accent);">ScheduleLink</a>
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // ============== State ==============
+        const state = {
+            username: '',
+            host: null,
+            selectedDate: null,
+            selectedTime: null,
+            selectedSlot: null,
+            currentMonth: new Date(),
+            availableSlots: []
+        };
+        
+        // ============== API ==============
+        const API_BASE = 'https://schedulelink-app.onrender.com';
+        
+        async function api(endpoint) {
+            const response = await fetch(API_BASE + endpoint);
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.detail || 'An error occurred');
+            }
+            
+            return data;
+        }
+        
+        async function apiPost(endpoint, body) {
+            const response = await fetch(API_BASE + endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.detail || 'An error occurred');
+            }
+            
+            return data;
+        }
+        
+        // ============== Initialization ==============
+        async function init() {
+            // Get username from URL
+            const path = window.location.pathname;
+            const match = path.match(/\/book\/([^\/]+)/);
+            
+            if (!match) {
+                showError();
+                return;
+            }
+            
+            state.username = match[1];
+            
+            try {
+                state.host = await api(`/api/public/${state.username}`);
+                
+                document.getElementById('host-name').textContent = state.host.full_name;
+                document.getElementById('meeting-info').textContent = 
+                    `${state.host.meeting_duration} minute meeting`;
+                document.title = `Book with ${state.host.full_name} - ScheduleLink`;
+                
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('booking-flow').classList.remove('hidden');
+                
+                renderCalendar();
+            } catch (e) {
+                showError();
+            }
+        }
+        
+        function showError() {
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('error').classList.remove('hidden');
+        }
+        
+        // ============== Step Navigation ==============
+        function showStep(step) {
+            document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
+            document.getElementById(`step-${step}`).classList.add('active');
+        }
+        
+        // ============== Calendar ==============
+        function renderCalendar() {
+            const year = state.currentMonth.getFullYear();
+            const month = state.currentMonth.getMonth();
+            
+            // Update month label
+            const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                               'July', 'August', 'September', 'October', 'November', 'December'];
+            document.getElementById('calendar-month').textContent = `${monthNames[month]} ${year}`;
+            
+            // Get first day of month and total days
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            const totalDays = lastDay.getDate();
+            
+            // Get day of week for first day (0 = Sunday, convert to Monday start)
+            let startDay = firstDay.getDay();
+            startDay = startDay === 0 ? 6 : startDay - 1; // Convert to Mon=0, Sun=6
+            
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            // Build calendar days
+            let html = '';
+            
+            // Empty cells before first day
+            for (let i = 0; i < startDay; i++) {
+                html += '<div class="calendar-day empty"></div>';
+            }
+            
+            // Days of month
+            for (let day = 1; day <= totalDays; day++) {
+                const date = new Date(year, month, day);
+                const dateStr = formatDate(date);
+                const isPast = date < today;
+                const isToday = date.getTime() === today.getTime();
+                const isSelected = state.selectedDate === dateStr;
+                
+                let classes = 'calendar-day';
+                if (isPast) classes += ' disabled';
+                if (isToday) classes += ' today';
+                if (isSelected) classes += ' selected';
+                
+                html += `<div class="${classes}" onclick="selectDate('${dateStr}')" data-date="${dateStr}">${day}</div>`;
+            }
+            
+            document.getElementById('calendar-days').innerHTML = html;
+        }
+        
+        function prevMonth() {
+            state.currentMonth.setMonth(state.currentMonth.getMonth() - 1);
+            renderCalendar();
+        }
+        
+        function nextMonth() {
+            state.currentMonth.setMonth(state.currentMonth.getMonth() + 1);
+            renderCalendar();
+        }
+        
+        async function selectDate(dateStr) {
+            const date = new Date(dateStr);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            if (date < today) return;
+            
+            state.selectedDate = dateStr;
+            
+            // Update calendar UI
+            document.querySelectorAll('.calendar-day').forEach(el => {
+                el.classList.remove('selected');
+                if (el.dataset.date === dateStr) {
+                    el.classList.add('selected');
+                }
+            });
+            
+            // Show time selection step
+            showStep('time');
+            
+            // Display selected date
+            const displayDate = date.toLocaleDateString('en-US', {
+                weekday: 'long',
+                month: 'long',
+                day: 'numeric',
+                year: 'numeric'
+            });
+            document.getElementById('selected-date-display').textContent = displayDate;
+            
+            // Load available times
+            await loadTimeSlots(dateStr);
+        }
+        
+        async function loadTimeSlots(dateStr) {
+            document.getElementById('time-slots-loading').classList.remove('hidden');
+            document.getElementById('time-slots-container').classList.add('hidden');
+            
+            try {
+                const data = await api(`/api/public/${state.username}/availability?date=${dateStr}`);
+                state.availableSlots = data.slots;
+                
+                document.getElementById('time-slots-loading').classList.add('hidden');
+                document.getElementById('time-slots-container').classList.remove('hidden');
+                
+                if (data.slots.length === 0) {
+                    document.getElementById('time-slots').classList.add('hidden');
+                    document.getElementById('no-slots').classList.remove('hidden');
+                } else {
+                    document.getElementById('time-slots').classList.remove('hidden');
+                    document.getElementById('no-slots').classList.add('hidden');
+                    
+                    const html = data.slots.map(slot => `
+                        <div class="time-slot" onclick="selectTime('${slot.time}', '${slot.datetime_utc}')">
+                            ${formatTime(slot.time)}
+                        </div>
+                    `).join('');
+                    
+                    document.getElementById('time-slots').innerHTML = html;
+                }
+            } catch (e) {
+                document.getElementById('time-slots-loading').classList.add('hidden');
+                document.getElementById('time-slots-container').classList.remove('hidden');
+                document.getElementById('time-slots').classList.add('hidden');
+                document.getElementById('no-slots').classList.remove('hidden');
+            }
+        }
+        
+        function selectTime(time, datetimeUtc) {
+            state.selectedTime = time;
+            state.selectedSlot = datetimeUtc;
+            
+            // Update UI
+            document.querySelectorAll('.time-slot').forEach(el => {
+                el.classList.remove('selected');
+                if (el.textContent.trim() === formatTime(time)) {
+                    el.classList.add('selected');
+                }
+            });
+            
+            // Show details step
+            showStep('details');
+            
+            // Update summary
+            const date = new Date(state.selectedDate);
+            document.getElementById('summary-date').textContent = date.toLocaleDateString('en-US', {
+                weekday: 'long',
+                month: 'long',
+                day: 'numeric'
+            });
+            document.getElementById('summary-time').textContent = formatTime(time);
+            document.getElementById('summary-duration').textContent = `${state.host.meeting_duration} minutes`;
+        }
+        
+        // ============== Booking Submission ==============
+        async function handleBooking(event) {
+            event.preventDefault();
+            
+            const form = event.target;
+            const btn = document.getElementById('book-btn');
+            const errorDiv = document.getElementById('booking-error');
+            
+            btn.disabled = true;
+            btn.textContent = 'Booking...';
+            errorDiv.classList.add('hidden');
+            
+            // Build datetime from selected slot
+            const bookingTime = new Date(state.selectedSlot.replace(' ', 'T') + 'Z');
+            
+            try {
+                await apiPost(`/api/public/${state.username}/book`, {
+                    client_name: form.client_name.value,
+                    client_email: form.client_email.value,
+                    client_phone: form.client_phone.value || null,
+                    client_notes: form.client_notes.value || null,
+                    booking_time: bookingTime.toISOString()
+                });
+                
+                // Show confirmation
+                document.getElementById('confirm-host').textContent = state.host.full_name;
+                document.getElementById('confirm-datetime').textContent = 
+                    `${document.getElementById('summary-date').textContent} at ${formatTime(state.selectedTime)}`;
+                document.getElementById('confirm-duration').textContent = 
+                    `${state.host.meeting_duration} minutes`;
+                
+                showStep('confirm');
+                
+            } catch (e) {
+                errorDiv.textContent = e.message;
+                errorDiv.classList.remove('hidden');
+                btn.disabled = false;
+                btn.textContent = 'Confirm Booking';
+                
+                // If slot taken, go back to time selection
+                if (e.message.includes('no longer available')) {
+                    setTimeout(() => {
+                        showStep('time');
+                        loadTimeSlots(state.selectedDate);
+                    }, 2000);
+                }
+            }
+        }
+        
+        // ============== Utility Functions ==============
+        function formatDate(date) {
+            return date.toISOString().split('T')[0];
+        }
+        
+        function formatTime(time) {
+            const [hours, minutes] = time.split(':');
+            const h = parseInt(hours);
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            const hour12 = h % 12 || 12;
+            return `${hour12}:${minutes} ${ampm}`;
+        }
+        
+        // Start the app
+        init();
+    </script>
+</body>
+</html>
