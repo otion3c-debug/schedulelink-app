@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from fastapi import APIRouter, HTTPException, status
 
-from ..database import get_db, dict_from_row
+from ..database import get_db, dict_from_row, insert_returning_id, USE_POSTGRES
 from ..models import (
     UserPublic, AvailabilityResponse, AvailabilitySlot,
     BookingCreate, BookingResponse, MessageResponse
@@ -232,12 +232,14 @@ async def create_booking(username: str, data: BookingCreate):
         # Format booking time for database
         booking_time_utc = data.booking_time.astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%d %H:%M:%S")
         
-        # Use IMMEDIATE transaction for conflict prevention
-        conn.execute("BEGIN IMMEDIATE")
+        # Use transaction for conflict prevention
+        if USE_POSTGRES:
+            conn.execute("BEGIN")
+        else:
+            conn.execute("BEGIN IMMEDIATE")
         
         try:
             # Check for conflicts (same time slot)
-            # A conflict exists if the new booking overlaps with any existing booking
             existing = conn.execute(
                 """
                 SELECT id FROM bookings
@@ -257,14 +259,12 @@ async def create_booking(username: str, data: BookingCreate):
             # Generate cancellation token
             cancellation_token = secrets.token_urlsafe(32)
             
-            # Insert booking
-            cursor = conn.execute(
-                """
-                INSERT INTO bookings (
-                    host_id, client_name, client_email, client_phone,
-                    client_notes, booking_time, duration, cancellation_token
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+            # Insert booking using helper function
+            booking_id = insert_returning_id(
+                conn,
+                "bookings",
+                ["host_id", "client_name", "client_email", "client_phone",
+                 "client_notes", "booking_time", "duration", "cancellation_token"],
                 (
                     user_dict["id"],
                     data.client_name,
@@ -276,7 +276,6 @@ async def create_booking(username: str, data: BookingCreate):
                     cancellation_token
                 )
             )
-            booking_id = cursor.lastrowid
             
             conn.execute("COMMIT")
             

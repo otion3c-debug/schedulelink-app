@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlite3 import IntegrityError
 
 from ..auth import hash_password, verify_password, create_access_token, get_current_user
-from ..database import get_db, dict_from_row, seed_working_hours
+from ..database import get_db, dict_from_row, seed_working_hours, insert_returning_id
 from ..models import (
     UserRegister, UserLogin, Token, UserProfile,
     ForgotPasswordRequest, ResetPasswordRequest, MessageResponse
@@ -38,14 +38,12 @@ async def register(data: UserRegister):
         # Create user
         password_hash = hash_password(data.password)
         try:
-            cursor = conn.execute(
-                """
-                INSERT INTO users (email, password_hash, full_name, username)
-                VALUES (?, ?, ?, ?)
-                """,
+            user_id = insert_returning_id(
+                conn,
+                "users",
+                ["email", "password_hash", "full_name", "username"],
                 (data.email, password_hash, data.full_name, data.username.lower())
             )
-            user_id = cursor.lastrowid
             
             # Seed default working hours (Mon-Fri, 9-5)
             seed_working_hours(user_id, conn)
