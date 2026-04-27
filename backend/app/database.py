@@ -381,16 +381,11 @@ def insert_returning_id(conn, table: str, columns: list, values: tuple) -> int:
 
 # FastAPI dependency for database session
 def get_db_dependency():
-    """FastAPI dependency that provides a database connection."""
-    db_gen = get_db()
-    db = next(db_gen)
-    try:
-        yield db
-    finally:
-        try:
-            next(db_gen)
-        except StopIteration:
-            pass
+    """FastAPI dependency that provides a database connection.
+    
+    This is a generator-based dependency that FastAPI handles properly.
+    """
+    yield from get_db()
 
 
 # Initialize database on module import
