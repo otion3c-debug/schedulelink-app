@@ -331,13 +331,26 @@ def get_db() -> Generator[Any, None, None]:
             conn.close()
 
 
+def _serialize_datetime(value: Any) -> Any:
+    """Convert datetime objects to ISO format strings for JSON serialization."""
+    from datetime import datetime, date
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    return value
+
+
 def dict_from_row(row: Optional[Any]) -> Optional[Dict[str, Any]]:
-    """Convert database row to dict."""
+    """Convert database row to dict, with datetime serialization."""
     if row is None:
         return None
     if USE_POSTGRES:
         # RealDictCursor already returns dict-like objects
-        return dict(row) if row else None
+        # Convert datetime fields to strings for Pydantic compatibility
+        if row:
+            return {k: _serialize_datetime(v) for k, v in dict(row).items()}
+        return None
     return dict(row)
 
 

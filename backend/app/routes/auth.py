@@ -158,11 +158,12 @@ async def reset_password(data: ResetPasswordRequest):
     """Reset password using a valid reset token."""
     with get_db() as conn:
         # Find all valid (non-used, non-expired) tokens
+        # Use CURRENT_TIMESTAMP which works on both SQLite and PostgreSQL
         rows = conn.execute(
             """
             SELECT id, user_id, token_hash, expires_at
             FROM password_reset_tokens
-            WHERE used = 0 AND expires_at > datetime('now')
+            WHERE used = 0 AND expires_at > CURRENT_TIMESTAMP
             """
         ).fetchall()
 
