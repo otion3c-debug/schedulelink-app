@@ -4,6 +4,37 @@ These steps must be done manually through web dashboards (no API access availabl
 
 ---
 
+## URGENT: Fix Stripe Secret Key (Pro+ Checkout Broken)
+
+The Stripe checkout is failing because the `STRIPE_SECRET_KEY` on Render is **truncated** (missing the last 2 characters).
+
+### Quick Fix Option A: Add Missing Suffix
+
+1. Go to https://dashboard.render.com → **schedulelink-app** → **Environment**
+2. Add new environment variable:
+   - Key: `STRIPE_KEY_SUFFIX`
+   - Value: `zr`
+3. Click **Save Changes** and wait for redeploy
+
+### Better Fix Option B: Correct the Full Key
+
+1. Go to https://dashboard.render.com → **schedulelink-app** → **Environment**
+2. Find `STRIPE_SECRET_KEY` and verify/update it to the **full** test key from your Stripe dashboard
+   - The key should be 107 characters long and end with `...qC3Uzr`
+   - Get the correct key from: https://dashboard.stripe.com/test/apikeys
+3. Click **Save Changes** and wait for redeploy
+
+### Verify the Fix
+
+After Render redeploys:
+```bash
+curl -s https://schedulelink-app.onrender.com/api/stripe/debug-config
+```
+
+Should show `stripe_secret_key_full_len: 107` (the correct length).
+
+---
+
 ## Part 1: Set Up Supabase Database (REQUIRED)
 
 The SQLite database on Render gets wiped every deploy. You need persistent PostgreSQL.
