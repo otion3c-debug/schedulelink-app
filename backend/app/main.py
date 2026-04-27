@@ -91,13 +91,25 @@ async def serve_booking_page(username: str):
 
 @app.get("/{path:path}")
 async def serve_static(path: str):
-    """Serve static files or fallback to SPA."""
+    """Serve static files or fallback to SPA.
+    
+    NOTE: API routes are handled by included routers.
+    This catch-all should NOT intercept /api/* paths.
+    """
+    # Never intercept API routes - let them 404 properly if not found
+    if path.startswith("api/") or path.startswith("api"):
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=404,
+            content={"detail": f"API endpoint not found: /{path}"}
+        )
+    
     file_path = FRONTEND_PATH / path
     
     if file_path.exists() and file_path.is_file():
         return FileResponse(file_path)
     
-    # Fallback to index.html for SPA routing
+    # Fallback to index.html for SPA routing (for frontend routes only)
     return FileResponse(FRONTEND_PATH / "index.html")
 
 

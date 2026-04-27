@@ -11,6 +11,21 @@ from ..models import CheckoutSessionResponse, PortalSessionResponse, MessageResp
 router = APIRouter(prefix="/api/stripe", tags=["stripe"])
 
 
+@router.get("/debug-config")
+async def debug_stripe_config():
+    """Debug endpoint to check Stripe configuration (remove in production)."""
+    settings = get_settings()
+    return {
+        "stripe_secret_key_set": bool(settings.stripe_secret_key),
+        "stripe_secret_key_prefix": settings.stripe_secret_key[:20] + "..." if settings.stripe_secret_key else None,
+        "stripe_publishable_key_set": bool(settings.stripe_publishable_key),
+        "stripe_price_id_set": bool(settings.stripe_price_id),
+        "stripe_price_id_pro_set": bool(settings.stripe_price_id_pro),
+        "stripe_price_id_pro_plus_set": bool(settings.stripe_price_id_pro_plus),
+        "app_url": settings.app_url,
+    }
+
+
 def get_stripe():
     """Initialize Stripe with API key."""
     settings = get_settings()
@@ -41,6 +56,13 @@ async def create_checkout_session(
     settings = get_settings()
     stripe_client = get_stripe()
     
+    # Check if Stripe is configured
+    if not settings.stripe_secret_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Billing service not configured. Please contact support."
+        )
+    
     # Determine which tier/price to use
     tier = request.tier if request else "pro"
     if tier == "pro_plus":
@@ -51,31 +73,31 @@ async def create_checkout_session(
     if not price_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Stripe price not configured for this tier"
+            detail=f"Stripe price not configured for tier '{tier}'. Please contact support."
         )
     
-    # Create or get Stripe customer
-    customer_id = current_user.get("stripe_customer_id")
-    
-    if not customer_id:
-        # Create new Stripe customer
-        customer = stripe_client.Customer.create(
-            email=current_user["email"],
-            name=current_user["full_name"],
-            metadata={"user_id": current_user["id"]}
-        )
-        customer_id = customer.id
-        
-        # Save customer ID
-        with get_db() as conn:
-            conn.execute(
-                "UPDATE users SET stripe_customer_id = ? WHERE id = ?",
-                (customer_id, current_user["id"])
-            )
-            conn.commit()
-    
-    # Create checkout session
     try:
+        # Create or get Stripe customer
+        customer_id = current_user.get("stripe_customer_id")
+        
+        if not customer_id:
+            # Create new Stripe customer
+            customer = stripe_client.Customer.create(
+                email=current_user["email"],
+                name=current_user["full_name"],
+                metadata={"user_id": current_user["id"]}
+            )
+            customer_id = customer.id
+            
+            # Save customer ID
+            with get_db() as conn:
+                conn.execute(
+                    "UPDATE users SET stripe_customer_id = ? WHERE id = ?",
+                    (customer_id, current_user["id"])
+                )
+                conn.commit()
+        
+        # Create checkout session
         session = stripe_client.checkout.Session.create(
             customer=customer_id,
             payment_method_types=["card"],
@@ -95,6 +117,14 @@ async def create_checkout_session(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Stripe error: {str(e)}"
+        )
+    except Exception as e:
+        # Log the actual error for debugging
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Billing error: {str(e)}"
         )
 
 
