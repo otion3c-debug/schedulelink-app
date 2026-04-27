@@ -71,11 +71,14 @@ async function login(email, password) {
         body: JSON.stringify({ email, password })
     });
     
-    if (data) {
+    if (data && data.access_token) {
         state.token = data.access_token;
         localStorage.setItem('schedulelink_token', data.access_token);
-        await loadUser();
+        // Load user in background - don't let failures block navigation
+        await loadUserSafe();
         navigate('#/dashboard');
+    } else {
+        throw new Error('Login failed: No access token received');
     }
 }
 
@@ -85,11 +88,14 @@ async function register(email, password, full_name, username) {
         body: JSON.stringify({ email, password, full_name, username })
     });
     
-    if (data) {
+    if (data && data.access_token) {
         state.token = data.access_token;
         localStorage.setItem('schedulelink_token', data.access_token);
-        await loadUser();
+        // Load user in background - don't let failures block navigation
+        await loadUserSafe();
         navigate('#/dashboard');
+    } else {
+        throw new Error('Registration failed: No access token received');
     }
 }
 
@@ -107,6 +113,20 @@ async function loadUser() {
         state.user = await api('/api/auth/me');
     } catch (e) {
         logout();
+    }
+}
+
+// Safe version of loadUser that doesn't logout on failure
+// Used during login/register when we know the token is valid
+async function loadUserSafe() {
+    if (!state.token) return;
+    
+    try {
+        state.user = await api('/api/auth/me');
+    } catch (e) {
+        // Don't logout - the token might still be valid
+        // User data will load on next navigation
+        console.warn('Failed to load user data:', e.message);
     }
 }
 
