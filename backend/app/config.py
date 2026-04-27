@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     stripe_publishable_key: str = ""
     stripe_price_id: str = ""
     stripe_webhook_secret: str = ""
+    stripe_key_suffix: str = ""  # Workaround for truncated env vars: set to missing chars
+    
+    @property
+    def stripe_secret_key_full(self) -> str:
+        """Get the full Stripe secret key (handles truncated env vars)."""
+        return self.stripe_secret_key + self.stripe_key_suffix
     
     # Google OAuth
     google_client_id: str = ""

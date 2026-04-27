@@ -15,9 +15,12 @@ router = APIRouter(prefix="/api/stripe", tags=["stripe"])
 async def debug_stripe_config():
     """Debug endpoint to check Stripe configuration (remove in production)."""
     settings = get_settings()
+    full_key = settings.stripe_secret_key_full
     return {
         "stripe_secret_key_set": bool(settings.stripe_secret_key),
         "stripe_secret_key_prefix": settings.stripe_secret_key[:20] + "..." if settings.stripe_secret_key else None,
+        "stripe_secret_key_suffix_set": bool(settings.stripe_key_suffix),
+        "stripe_secret_key_full_len": len(full_key) if full_key else 0,
         "stripe_publishable_key_set": bool(settings.stripe_publishable_key),
         "stripe_price_id_set": bool(settings.stripe_price_id),
         "stripe_price_id_pro_set": bool(settings.stripe_price_id_pro),
@@ -29,7 +32,8 @@ async def debug_stripe_config():
 def get_stripe():
     """Initialize Stripe with API key."""
     settings = get_settings()
-    stripe.api_key = settings.stripe_secret_key
+    # Use full key property which handles truncated env vars
+    stripe.api_key = settings.stripe_secret_key_full
     return stripe
 
 
