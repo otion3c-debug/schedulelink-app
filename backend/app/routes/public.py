@@ -35,10 +35,10 @@ def get_available_slots(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid date format. Use YYYY-MM-DD"
         )
-    
+
     # Get day of week (0=Monday, 6=Sunday)
     day_of_week = target_date.weekday()
-    
+
     # Get working hours for this day
     working_hours = conn.execute(
         """
@@ -47,16 +47,16 @@ def get_available_slots(
         """,
         (user_id, day_of_week)
     ).fetchone()
-    
+
     if not working_hours:
         return []  # Not a working day
-    
+
     wh = dict_from_row(working_hours)
-    
+
     # Parse working hours
     start_hour, start_min = map(int, wh["start_time"].split(":"))
     end_hour, end_min = map(int, wh["end_time"].split(":"))
-    
+
     # Create timezone-aware start/end times
     tz = ZoneInfo(timezone)
     work_start = datetime(
@@ -67,7 +67,7 @@ def get_available_slots(
         target_date.year, target_date.month, target_date.day,
         end_hour, end_min, tzinfo=tz
     )
-    
+
     # Get existing bookings for this day
     day_start = datetime(
         target_date.year, target_date.month, target_date.day,
@@ -77,7 +77,7 @@ def get_available_slots(
         target_date.year, target_date.month, target_date.day,
         23, 59, tzinfo=tz
     ).astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%d %H:%M:%S")
-    
+
     existing_bookings = conn.execute(
         """
         SELECT booking_time, duration FROM bookings
@@ -86,7 +86,7 @@ def get_available_slots(
         """,
         (user_id, day_start, day_end)
     ).fetchall()
-    
+
     # Convert bookings to datetime objects
     booked_times = []
     for booking in existing_bookings:
@@ -95,12 +95,12 @@ def get_available_slots(
         ).replace(tzinfo=ZoneInfo("UTC"))
         booking_end = booking_start + timedelta(minutes=booking["duration"] + buffer)
         booked_times.append((booking_start, booking_end))
-    
+
     # Generate available slots
     slots = []
     current_time = work_start
     slot_duration = timedelta(minutes=duration + buffer)
-    
+
     # Don't show past slots
     now = datetime.now(tz)
     if target_date == now.date():
@@ -109,31 +109,31 @@ def get_available_slots(
             current_time = max(current_time, now.replace(minute=30, second=0, microsecond=0))
         else:
             current_time = max(current_time, (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0))
-    
+
     while current_time + timedelta(minutes=duration) <= work_end:
         slot_end = current_time + timedelta(minutes=duration)
         slot_with_buffer = current_time + slot_duration
-        
+
         # Check if this slot conflicts with any booking
         is_available = True
         current_utc = current_time.astimezone(ZoneInfo("UTC"))
         slot_end_utc = slot_with_buffer.astimezone(ZoneInfo("UTC"))
-        
+
         for booking_start, booking_end in booked_times:
             # Check for overlap
             if not (slot_end_utc <= booking_start or current_utc >= booking_end):
                 is_available = False
                 break
-        
+
         if is_available:
             slots.append(AvailabilitySlot(
                 time=current_time.strftime("%H:%M"),
                 datetime_utc=current_utc.strftime("%Y-%m-%d %H:%M:%S")
             ))
-        
+
         # Move to next slot (30-minute increments)
         current_time += timedelta(minutes=30)
-    
+
     return slots
 
 
@@ -145,34 +145,82 @@ async def get_host_info(username: str):
             "SELECT full_name, username, timezone, meeting_duration FROM users WHERE username = ?",
             (username.lower(),)
         ).fetchone()
-        
+
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
-        
+
         user_dict = dict_from_row(user)
         return UserPublic(**user_dict)
 
 
-@router.get("/{username}/availability", response_model=AvailabilityResponse)
-async def get_availability(username: str, date: str):
-    """Get available time slots for a specific date."""
+@router.get("/{username}/availability")
+async def get_availability(
+    username: str,
+    date: str = None,
+    start_date: str = None,
+    end_date: str = None
+):
+    """Get available time slots. Supports single date or date range.
+    
+    - Single date: ?date=YYYY-MM-DD
+    - Date range: ?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD
+    """
     with get_db() as conn:
         user = conn.execute(
             "SELECT * FROM users WHERE username = ?",
             (username.lower(),)
         ).fetchone()
-        
+
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
-        
+
         user_dict = dict_from_row(user)
+
+        # If start_date and end_date provided, return array of availability
+        if start_date and end_date:
+            availability = []
+            try:
+                start = datetime.strptime(start_date, "%Y-%m-%d").date()
+                end = datetime.strptime(end_date, "%Y-%m-%d").date()
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid date format. Use YYYY-MM-DD"
+                )
+            
+            current = start
+            while current <= end:
+                date_str = current.strftime("%Y-%m-%d")
+                slots = get_available_slots(
+                    user_id=user_dict["id"],
+                    date_str=date_str,
+                    duration=user_dict["meeting_duration"],
+                    buffer=user_dict["buffer_minutes"],
+                    timezone=user_dict["timezone"],
+                    conn=conn
+                )
+                availability.append({
+                    "date": date_str,
+                    "slots": slots,
+                    "timezone": user_dict["timezone"]
+                })
+                current += timedelta(days=1)
+            
+            return {"availability": availability}
         
+        # Single date (original behavior)
+        if not date:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Either 'date' or 'start_date' + 'end_date' is required"
+            )
+
         slots = get_available_slots(
             user_id=user_dict["id"],
             date_str=date,
@@ -181,40 +229,40 @@ async def get_availability(username: str, date: str):
             timezone=user_dict["timezone"],
             conn=conn
         )
-        
-        return AvailabilityResponse(
-            date=date,
-            slots=slots,
-            timezone=user_dict["timezone"]
-        )
+
+        return {
+            "date": date,
+            "slots": slots,
+            "timezone": user_dict["timezone"]
+        }
 
 
 @router.post("/{username}/book", response_model=BookingResponse, status_code=status.HTTP_201_CREATED)
 async def create_booking(username: str, data: BookingCreate):
     """Create a new booking (public endpoint)."""
     settings = get_settings()
-    
+
     with get_db() as conn:
         # Get host
         user = conn.execute(
             "SELECT * FROM users WHERE username = ?",
             (username.lower(),)
         ).fetchone()
-        
+
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
-        
+
         user_dict = dict_from_row(user)
-        
+
         # Check booking limit for free users
         if user_dict["subscription_status"] == "free":
             # Count bookings this month
             now = datetime.utcnow()
             month_start = datetime(now.year, now.month, 1).strftime("%Y-%m-%d %H:%M:%S")
-            
+
             booking_count = conn.execute(
                 """
                 SELECT COUNT(*) as count FROM bookings
@@ -222,22 +270,22 @@ async def create_booking(username: str, data: BookingCreate):
                 """,
                 (user_dict["id"], month_start)
             ).fetchone()["count"]
-            
+
             if booking_count >= settings.free_bookings_per_month:
                 raise HTTPException(
                     status_code=status.HTTP_402_PAYMENT_REQUIRED,
                     detail="This user has reached their free booking limit. Please ask them to upgrade their account."
                 )
-        
+
         # Format booking time for database
         booking_time_utc = data.booking_time.astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%d %H:%M:%S")
-        
+
         # Use transaction for conflict prevention
         if USE_POSTGRES:
             conn.execute("BEGIN")
         else:
             conn.execute("BEGIN IMMEDIATE")
-        
+
         try:
             # Check for conflicts (same time slot)
             existing = conn.execute(
@@ -248,17 +296,17 @@ async def create_booking(username: str, data: BookingCreate):
                 """,
                 (user_dict["id"], booking_time_utc)
             ).fetchone()
-            
+
             if existing:
                 conn.execute("ROLLBACK")
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail="This time slot is no longer available. Please select another time."
                 )
-            
+
             # Generate cancellation token
             cancellation_token = secrets.token_urlsafe(32)
-            
+
             # Insert booking using helper function
             booking_id = insert_returning_id(
                 conn,
@@ -276,9 +324,9 @@ async def create_booking(username: str, data: BookingCreate):
                     cancellation_token
                 )
             )
-            
+
             conn.execute("COMMIT")
-            
+
         except HTTPException:
             raise
         except Exception as e:
@@ -287,14 +335,14 @@ async def create_booking(username: str, data: BookingCreate):
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to create booking"
             )
-        
+
         # Fetch created booking
         booking = conn.execute(
             "SELECT * FROM bookings WHERE id = ?",
             (booking_id,)
         ).fetchone()
         booking_dict = dict_from_row(booking)
-        
+
         # Create Google Calendar event if connected
         google_event_id = None
         if user_dict["google_refresh_token"]:
@@ -307,7 +355,7 @@ async def create_booking(username: str, data: BookingCreate):
                     duration_minutes=user_dict["meeting_duration"],
                     timezone=user_dict["timezone"]
                 )
-                
+
                 if google_event_id:
                     conn.execute(
                         "UPDATE bookings SET google_event_id = ? WHERE id = ?",
@@ -317,10 +365,10 @@ async def create_booking(username: str, data: BookingCreate):
             except Exception as e:
                 # Non-critical, log and continue
                 print(f"Failed to create Google Calendar event: {e}")
-        
+
         # Send confirmation emails
         cancellation_url = f"{settings.app_url}/api/bookings/cancel/{cancellation_token}"
-        
+
         try:
             await send_booking_confirmation_to_client(
                 client_email=data.client_email,
@@ -333,7 +381,7 @@ async def create_booking(username: str, data: BookingCreate):
             )
         except Exception as e:
             print(f"Failed to send client confirmation email: {e}")
-        
+
         try:
             await send_booking_notification_to_host(
                 host_email=user_dict["email"],
@@ -348,7 +396,7 @@ async def create_booking(username: str, data: BookingCreate):
             )
         except Exception as e:
             print(f"Failed to send host notification email: {e}")
-        
+
         return BookingResponse(
             id=booking_dict["id"],
             host_id=booking_dict["host_id"],
