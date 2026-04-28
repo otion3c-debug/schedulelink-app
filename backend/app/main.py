@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pathlib import Path
 
 from .config import get_settings
-from .database import init_database
+from .database import init_database, get_db
 from .routes import auth, users, bookings, public, stripe_, google
 from .scheduler import start_scheduler, stop_scheduler
 
@@ -64,6 +64,55 @@ FRONTEND_PATH = Path(__file__).parent.parent.parent / "frontend"
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy", "service": "ScheduleLink"}
+
+
+@app.get("/api/debug/db")
+async def debug_db():
+    """Debug endpoint to reveal database status."""
+    from .database import USE_POSTGRES, DATABASE_URL
+    with get_db() as conn:
+        user_count = conn.execute("SELECT COUNT(*) as c FROM users").fetchone()
+        from .database import dict_from_row
+        user_count_dict = dict_from_row(user_count)
+        return {
+            "use_postgres": USE_POSTGRES,
+            "db_url_set": bool(DATABASE_URL),
+            "db_url_prefix": DATABASE_URL[:30] + "..." if DATABASE_URL else None,
+            "user_count": user_count_dict['c'] if user_count_dict else 0,
+        }
+
+
+@app.post("/api/debug/seed-eric")
+async def seed_eric(data: dict):
+    """Seed E's user account. Protected by a seed key."""
+    from .database import get_db, seed_working_hours, dict_from_row
+    from .auth import hash_password
+    seed_key = data.get("key", "")
+    expected_key = "schedulelink-seed-2026"
+    if seed_key != expected_key:
+        return JSONResponse(status_code=403, content={"detail": "Invalid seed key"})
+    
+    with get_db() as conn:
+        existing = conn.execute("SELECT id FROM users WHERE username = 'eric'").fetchone()
+        if existing:
+            return {"status": "already_exists", "user_id": dict_from_row(existing).get('id')}
+        
+        # Create eric user
+        password_hash = hash_password("ScheduleLink2026!")
+        from .database import insert_returning_id
+        user_id = insert_returning_id(
+            conn,
+            "users",
+            ["email", "password_hash", "full_name", "username", "timezone", "meeting_duration", "buffer_minutes", "subscription_status"],
+            ("eric@otion.solutions", password_hash, "Eric Hunt", "eric", "America/New_York", 30, 0, "pro")
+        )
+        conn.commit()
+        
+        # Seed working hours
+        seed_working_hours(user_id, conn)
+        conn.commit()
+        
+        return {"status": "created", "user_id": user_id}
 
 
 @app.get("/api/config")
