@@ -35,7 +35,9 @@ async function api(endpoint, options = {}) {
     
     if (response.status === 401) {
         // Token expired or invalid
-        logout();
+        if (!options.noLogout) {
+            logout();
+        }
         return null;
     }
     
@@ -140,10 +142,34 @@ function getRoute() {
     return hash.slice(1); // Remove #
 }
 
+function getQueryParams() {
+    return new URLSearchParams(window.location.hash.split('?')[1] || '');
+}
+
 // ============== Rendering ==============
-function render() {
+async function render() {
     const app = document.getElementById('app');
     const route = getRoute();
+    const params = getQueryParams();
+    
+    // STRIPE RETURN HANDLING — run before auth check
+    // If user just returned from Stripe, show the result even if auth is momentarily unavailable
+    const billingStatus = params.get('billing');
+    if (billingStatus === 'success' || billingStatus === 'cancelled') {
+        // User just returned from Stripe — show the result even if auth is momentarily
+        // unavailable. Use noLogout so a bad token doesn't force a redirect to login.
+        if (state.token) {
+            try {
+                state.user = await api('/api/auth/me', { noLogout: true });
+            } catch(e) {
+                // Don't logout — just show what we can without user data
+            }
+        }
+        // Render settings with the billing param (shows success/cancel banner)
+        // Even if auth failed, show the settings page with the banner
+        await renderSettings(app, params);
+        return;
+    }
     
     // Auth required routes
     const authRoutes = ['/dashboard', '/settings', '/bookings'];
@@ -169,7 +195,7 @@ function render() {
     } else if (route === '/dashboard') {
         renderDashboard(app);
     } else if (route === '/settings') {
-        renderSettings(app);
+        await renderSettings(app, params);
     } else if (route === '/bookings') {
         renderBookings(app);
     } else {
@@ -672,18 +698,31 @@ async function renderDashboard(app) {
     app.innerHTML = renderDashboardLayout(content);
 }
 
-async function renderSettings(app) {
+async function renderSettings(app, params) {
     app.innerHTML = renderDashboardLayout(`
         <div class="loading">
             <div class="spinner"></div>
         </div>
     `);
     
-    // Check for URL params (Stripe/Google callbacks)
-    const params = new URLSearchParams(window.location.hash.split('?')[1] || '');
     let alert = '';
     
-    if (params.get('subscription') === 'success') {
+    if (params.get('billing') === 'success') {
+        alert = `<div class="alert alert-success fade-in" style="font-size: 1.05em; padding: 1.25rem; border: 1px solid #22c55e; animation: celebratePulse 2s ease-out;">
+            🎉 <strong>Welcome to Pro!</strong> Your subscription is active. Enjoy unlimited bookings!
+        </div>`;
+        // Auto-refresh user state after a short delay to pick up is_paid: true
+        setTimeout(async () => {
+            try {
+                state.user = await api('/api/auth/me');
+                render(); // Re-render to update header badge and subscription card
+            } catch(e) {
+                // Silent fail — user still sees the success message
+            }
+        }, 2500);
+    } else if (params.get('billing') === 'cancelled') {
+        alert = '<div class="alert alert-info fade-in">Billing upgrade was cancelled. No charges were made.</div>';
+    } else if (params.get('subscription') === 'success') {
         alert = '<div class="alert alert-success fade-in">🎉 Subscription activated successfully!</div>';
     } else if (params.get('google') === 'success') {
         alert = '<div class="alert alert-success fade-in">✅ Google Calendar connected successfully!</div>';
@@ -1177,12 +1216,15 @@ function renderSubscriptionCard() {
 
 async function handleUpgrade(tier = 'pro') {
     try {
+        // Flag that we're heading to Stripe — on return, don't force re-auth
+        sessionStorage.setItem('pending_billing', 'upgrade');
         const data = await api('/api/stripe/checkout', { 
             method: 'POST',
             body: JSON.stringify({ tier })
         });
         window.location.href = data.checkout_url;
     } catch (e) {
+        sessionStorage.removeItem('pending_billing');
         alert('Error: ' + e.message);
     }
 }

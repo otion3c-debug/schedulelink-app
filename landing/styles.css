@@ -30,6 +30,65 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
+/* Top Bar — Orange Sign In Button */
+.top-bar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.875rem 1.5rem;
+    background-color: var(--bg-dark);
+    border-bottom: 1px solid var(--border);
+}
+
+.top-bar-logo {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+}
+
+.top-bar-signin {
+    display: inline-block;
+    background-color: #F97316;
+    color: #ffffff;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.875rem;
+    padding: 0.5rem 1.25rem;
+    border-radius: 8px;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+    box-shadow: 0 2px 8px rgba(249, 115, 22, 0.3);
+}
+
+.top-bar-signin:hover {
+    background-color: #ea580c;
+    transform: translateY(-1px);
+}
+
+.top-bar-signin:active {
+    transform: translateY(0);
+}
+
+/* Hero nav Sign In button */
+.btn-signin-hero {
+    display: inline-block;
+    background-color: #F97316;
+    color: #ffffff;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.875rem;
+    padding: 0.5rem 1.25rem;
+    border-radius: 8px;
+    transition: background-color 0.2s ease;
+}
+
+.btn-signin-hero:hover {
+    background-color: #ea580c;
+}
+
 /* Navigation */
 .nav {
     display: flex;
