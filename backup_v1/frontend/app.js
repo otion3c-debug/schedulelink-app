@@ -1,51 +1,16 @@
 /**
- * ScheduleLink - Frontend Application v2.1.0
+ * ScheduleLink - Frontend Application
  * Production-ready SPA with hash-based routing
  * 
  * Key Features:
  * - Public booking pages (NO auth required)
  * - Protected dashboard routes (auth required)
- * - Robust error handling
+ * - Proper error handling
  * - Professional UI/UX
- * 
- * CRITICAL: Public routes NEVER check auth status
  */
 
-// API URL - always point to the Render backend API (Vercel is static-only)
-const API_URL = 'https://schedulelink-app.onrender.com';
-
-// ============== Subscription Tier Helpers ==============
-function getTierName(status) {
-    const tierMap = {
-        'pro_plus': 'Pro+',
-        'pro': 'Pro',
-        'free': 'Free'
-    };
-    return tierMap[status] || 'Free';
-}
-
-function getTierDisplay(isPaid, status) {
-    if (isPaid) {
-        const name = getTierName(status);
-        if (name === 'Pro+') return '<span class="subscription-badge pro-plus">✨ Pro+</span>';
-        if (name === 'Pro') return '<span class="subscription-badge pro">✨ Pro</span>';
-    }
-    return '<span class="subscription-badge free">Free</span>';
-}
-
-function showUpgradeBanner() {
-    // Check sessionStorage for just-upgraded flag (set after successful Stripe return)
-    const justUpgraded = sessionStorage.getItem('just_upgraded');
-    const tier = sessionStorage.getItem('upgraded_tier') || 'Pro';
-    if (justUpgraded === 'true') {
-        sessionStorage.removeItem('just_upgraded');
-        sessionStorage.removeItem('upgraded_tier');
-        return `<div class="alert alert-success upgrade-banner">
-            <strong>🎉 Welcome to ${tier}!</strong> Your upgrade is complete. Enjoy your new features!
-        </div>`;
-    }
-    return '';
-}
+// API URL - dynamically determined based on current host
+const API_URL = window.location.origin;
 
 // ============== State ==============
 let state = {
@@ -72,8 +37,7 @@ async function api(endpoint, options = {}) {
             headers
         });
         
-        // Handle 401 only for protected endpoints
-        if (response.status === 401 && !endpoint.startsWith('/api/public') && !endpoint.startsWith('/api/cancel')) {
+        if (response.status === 401) {
             logout();
             throw new Error('Session expired. Please log in again.');
         }
@@ -138,9 +102,21 @@ async function router() {
     const { path, params } = parseHash();
     const app = document.getElementById('app');
     
-    // PUBLIC ROUTES - NO AUTH CHECK EVER
-    // These routes must work for anonymous visitors
+    // Default to login if no hash
+    if (!path) {
+        // Check if logged in, redirect accordingly
+        if (state.token) {
+            const isAuth = await checkAuth();
+            if (isAuth) {
+                navigate('dashboard');
+                return;
+            }
+        }
+        navigate('login');
+        return;
+    }
     
+    // PUBLIC ROUTES - NO AUTH CHECK
     if (path === 'login') {
         app.innerHTML = renderLogin();
         return;
@@ -153,30 +129,13 @@ async function router() {
     
     if (path.startsWith('book/')) {
         const username = path.split('/')[1];
-        if (username) {
-            await renderBookingPage(username);
-            return;
-        }
+        await renderBookingPage(username);
+        return;
     }
     
     if (path.startsWith('cancel/')) {
         const token = path.split('/')[1];
-        if (token) {
-            await renderCancelPage(token);
-            return;
-        }
-    }
-    
-    // Default to login/dashboard based on auth
-    if (!path) {
-        if (state.token) {
-            const isAuth = await checkAuth();
-            if (isAuth) {
-                navigate('dashboard');
-                return;
-            }
-        }
-        navigate('login');
+        await renderCancelPage(token);
         return;
     }
     
@@ -209,7 +168,10 @@ async function router() {
 
 // ============== Layout ==============
 function renderLayout(content, activePath) {
-    const badge = getTierDisplay(state.user?.subscription_status && state.user?.subscription_status !== 'free', state.user?.subscription_status);
+    const isPaid = state.user?.is_paid;
+    const badge = isPaid 
+        ? '<span class="subscription-badge pro">✨ Pro</span>'
+        : '<span class="subscription-badge free">Free</span>';
     
     return `
         <header class="header">
@@ -234,29 +196,12 @@ function renderLayout(content, activePath) {
 }
 
 // ============== Login Page ==============
-function renderPublicHeader(active) {
-    return `
-        <header class="public-header">
-            <div class="container public-header-content">
-                <a href="#/" class="public-logo">📅 ScheduleLink</a>
-                <div class="public-header-actions">
-                    ${active === 'login' 
-                        ? '<a href="#/register" class="btn-sign-up">Create Account</a>'
-                        : '<a href="#/login" class="btn-sign-in-landing">Sign In</a>'
-                    }
-                </div>
-            </div>
-        </header>
-    `;
-}
-
 function renderLogin() {
     setTimeout(() => {
         document.getElementById('login-form')?.addEventListener('submit', handleLogin);
     }, 0);
     
     return `
-        ${renderPublicHeader('login')}
         <div class="auth-page">
             <div class="auth-card">
                 <div class="auth-logo">
@@ -326,7 +271,6 @@ function renderRegister() {
     }, 0);
     
     return `
-        ${renderPublicHeader('register')}
         <div class="auth-page">
             <div class="auth-card">
                 <div class="auth-logo">
@@ -358,7 +302,6 @@ function renderRegister() {
                     <div class="form-group">
                         <label class="form-label">Password</label>
                         <input type="password" name="password" class="form-input" placeholder="••••••••" required minlength="6">
-                        <p class="form-hint">At least 6 characters</p>
                     </div>
                     
                     <button type="submit" class="btn btn-primary btn-lg" style="width: 100%;">
@@ -407,20 +350,11 @@ async function handleRegister(e) {
 
 // ============== Dashboard ==============
 async function renderDashboard() {
-    let bookings = [];
-    try {
-        bookings = await api('/api/bookings/upcoming');
-    } catch (e) {
-        console.error('Failed to load bookings:', e);
-    }
-    
+    const bookings = await api('/api/bookings/upcoming');
     const bookingLink = `${window.location.origin}/#/book/${state.user.username}`;
-    const tierName = getTierName(state.user.subscription_status);
-    const upgradeBanner = showUpgradeBanner();
     
     return `
         <div class="dashboard">
-            ${upgradeBanner}
             <div class="dashboard-header">
                 <h1>Welcome back, ${state.user.full_name || state.user.username}!</h1>
                 <p>Manage your bookings and availability</p>
@@ -428,9 +362,9 @@ async function renderDashboard() {
             
             <div class="booking-link-card">
                 <h3>Your Booking Link</h3>
-                <div class="booking-link-wrapper">
+                <div class="booking-link">
                     <input type="text" value="${bookingLink}" readonly id="booking-link-input">
-                    <button class="booking-link-copy" onclick="copyBookingLink()">📋 Copy</button>
+                    <button onclick="copyBookingLink()">📋 Copy</button>
                 </div>
             </div>
             
@@ -453,36 +387,10 @@ async function renderDashboard() {
                     <div class="value">${state.user.meeting_duration}m</div>
                 </div>
                 <div class="stat-card">
-                    <div class="label">Current Plan</div>
-                    <div class="value plan-value">${tierName}</div>
+                    <div class="label">Account Type</div>
+                    <div class="value">${state.user.is_paid ? 'Pro' : 'Free'}</div>
                 </div>
             </div>
-            
-            ${state.user.subscription_status && state.user.subscription_status !== 'free' ? `
-                <div class="card plan-card">
-                    <div class="plan-card-content">
-                        <span class="plan-card-icon">✨</span>
-                        <div>
-                            <h3 class="card-title">${tierName} Member</h3>
-                            <p style="color: var(--text-secondary); margin-top: 4px;">You're all set! Enjoy unlimited bookings and all ${tierName} features.</p>
-                        </div>
-                    </div>
-                </div>
-            ` : `
-                <div class="card" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1)); border-color: var(--primary);">
-                    <h3 class="card-title">✨ Upgrade to Pro</h3>
-                    <p style="margin-bottom: 20px; color: var(--text-secondary);">
-                        Get unlimited bookings, priority support, and help us keep ScheduleLink running.
-                    </p>
-                    <ul style="margin-bottom: 24px; color: var(--text-secondary); list-style: none;">
-                        <li style="margin-bottom: 8px;">✓ Unlimited bookings</li>
-                        <li style="margin-bottom: 8px;">✓ 7-day free trial</li>
-                        <li style="margin-bottom: 8px;">✓ Priority email support</li>
-                        <li>✓ Cancel anytime</li>
-                    </ul>
-                    <button class="btn btn-primary btn-lg" onclick="upgradeToPro()">Upgrade Now — $5/month</button>
-                </div>
-            `}
             
             <div class="card">
                 <div class="card-header">
@@ -492,7 +400,7 @@ async function renderDashboard() {
                 
                 ${bookings.length === 0 
                     ? '<div class="empty-state"><p>No upcoming meetings. Share your booking link to get started!</p></div>'
-                    : bookings.slice(0, 5).map(b => renderBookingItem(b)).join('')
+                    : bookings.map(b => renderBookingItem(b)).join('')
                 }
             </div>
         </div>
@@ -507,8 +415,8 @@ function renderBookingItem(booking) {
     return `
         <div class="booking-item">
             <div class="booking-info">
-                <h4>${escapeHtml(booking.client_name)}</h4>
-                <p>${escapeHtml(booking.client_email)}</p>
+                <h4>${booking.client_name}</h4>
+                <p>${booking.client_email}</p>
             </div>
             <div class="booking-time">
                 <div class="date">${dateStr}</div>
@@ -516,13 +424,6 @@ function renderBookingItem(booking) {
             </div>
         </div>
     `;
-}
-
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
 }
 
 function copyBookingLink() {
@@ -539,12 +440,7 @@ function copyBookingLink() {
 
 // ============== Bookings Page ==============
 async function renderBookings() {
-    let bookings = [];
-    try {
-        bookings = await api('/api/bookings');
-    } catch (e) {
-        console.error('Failed to load bookings:', e);
-    }
+    const bookings = await api('/api/bookings');
     
     return `
         <div class="dashboard">
@@ -573,9 +469,9 @@ function renderBookingItemFull(booking) {
     return `
         <div class="booking-item" style="${isCancelled ? 'opacity: 0.5;' : ''}">
             <div class="booking-info">
-                <h4>${escapeHtml(booking.client_name)} ${isCancelled ? '<span style="color: var(--danger);">(Cancelled)</span>' : ''}</h4>
-                <p>${escapeHtml(booking.client_email)}${booking.client_phone ? ' • ' + escapeHtml(booking.client_phone) : ''}</p>
-                ${booking.notes ? `<p style="margin-top: 8px; font-style: italic; color: var(--text-muted);">"${escapeHtml(booking.notes)}"</p>` : ''}
+                <h4>${booking.client_name} ${isCancelled ? '<span style="color: var(--danger);">(Cancelled)</span>' : ''}</h4>
+                <p>${booking.client_email}${booking.client_phone ? ' • ' + booking.client_phone : ''}</p>
+                ${booking.notes ? `<p style="margin-top: 8px; font-style: italic; color: var(--text-muted);">"${booking.notes}"</p>` : ''}
             </div>
             <div class="booking-time">
                 <div class="date">${dateStr}</div>
@@ -602,31 +498,8 @@ async function cancelBooking(id) {
 
 // ============== Settings Page ==============
 async function renderSettings(params) {
-    let workingHours = [];
-    try {
-        workingHours = await api('/api/working-hours');
-    } catch (e) {
-        console.error('Failed to load working hours:', e);
-    }
-    
+    const workingHours = await api('/api/working-hours');
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    
-    // Check for tier param from Stripe return (for immediate tier detection)
-    const tierParam = params.get('tier');
-    if (tierParam) {
-        sessionStorage.setItem('just_upgraded', 'true');
-        sessionStorage.setItem('upgraded_tier', tierParam === 'pro_plus' ? 'Pro+' : 'Pro');
-    }
-    
-    // Refresh user data on settings load to get latest subscription status
-    try {
-        state.user = await api('/api/auth/me');
-    } catch (e) {}
-    
-    const tierName = getTierName(state.user.subscription_status);
-    const isProPlus = tierName === 'Pro+';
-    const isPro = tierName === 'Pro';
-    const isPaid = state.user.subscription_status && state.user.subscription_status !== 'free';
     
     let alerts = '';
     if (params.get('google') === 'connected') {
@@ -635,10 +508,9 @@ async function renderSettings(params) {
         alerts = '<div class="alert alert-error">Failed to connect Google Calendar. Please try again.</div>';
     }
     if (params.get('billing') === 'success') {
-        const upgradedTier = params.get('tier') === 'pro_plus' ? 'Pro+' : 'Pro';
-        alerts = `<div class="alert alert-success upgrade-success-banner">
-            <strong>🎉 Welcome to ${upgradedTier}!</strong> Your upgrade is complete. You now have access to all ${upgradedTier} features!
-        </div>`;
+        alerts = '<div class="alert alert-success">✓ Subscription activated! Welcome to Pro.</div>';
+        // Refresh user data
+        state.user = await api('/api/auth/me');
     } else if (params.get('billing') === 'cancelled') {
         alerts = '<div class="alert alert-info">Checkout was cancelled. You can upgrade anytime.</div>';
     }
@@ -662,7 +534,7 @@ async function renderSettings(params) {
                 <form id="settings-form">
                     <div class="form-group">
                         <label class="form-label">Full Name</label>
-                        <input type="text" name="full_name" class="form-input" value="${escapeHtml(state.user.full_name || '')}" placeholder="Your name">
+                        <input type="text" name="full_name" class="form-input" value="${state.user.full_name || ''}" placeholder="Your name">
                     </div>
                     
                     <div class="form-group">
@@ -737,7 +609,7 @@ async function renderSettings(params) {
                 </form>
             </div>
             
-            ${!isPaid ? `
+            ${!state.user.is_paid ? `
                 <div class="card" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1)); border-color: var(--primary);">
                     <h3 class="card-title">✨ Upgrade to Pro</h3>
                     <p style="margin-bottom: 20px; color: var(--text-secondary);">
@@ -751,26 +623,13 @@ async function renderSettings(params) {
                     </ul>
                     <button class="btn btn-primary btn-lg" onclick="upgradeToPro()">Upgrade Now — $5/month</button>
                 </div>
-            ` : isProPlus ? `
-                <div class="card">
-                    <h3 class="card-title">✨ Pro+ Subscription</h3>
-                    <div class="google-status connected" style="margin-bottom: 16px;">
-                        ✓ You're on the <strong>Pro+</strong> plan — the best ScheduleLink has to offer!
-                    </div>
-                    <p style="color: var(--text-secondary); margin-bottom: 16px;">You have access to all features. Manage your subscription below.</p>
-                    <button class="btn btn-secondary" onclick="manageBilling()">Manage Billing</button>
-                </div>
             ` : `
                 <div class="card">
                     <h3 class="card-title">✨ Pro Subscription</h3>
                     <div class="google-status connected" style="margin-bottom: 16px;">
-                        ✓ You're on the <strong>Pro</strong> plan
+                        ✓ You're on the Pro plan
                     </div>
-                    <p style="color: var(--text-secondary); margin-bottom: 16px;">
-                        Want more? Upgrade to <strong>Pro+</strong> for additional features.
-                    </p>
-                    <button class="btn btn-primary" onclick="upgradeToProPlus()">Upgrade to Pro+</button>
-                    <button class="btn btn-secondary" style="margin-left: 12px;" onclick="manageBilling()">Manage Billing</button>
+                    <button class="btn btn-secondary" onclick="manageBilling()">Manage Billing</button>
                 </div>
             `}
         </div>
@@ -861,22 +720,6 @@ async function disconnectGoogle() {
 async function upgradeToPro() {
     try {
         const data = await api('/api/billing/checkout');
-        // Set flag so dashboard shows welcome banner on return
-        sessionStorage.setItem('just_upgraded', 'true');
-        sessionStorage.setItem('upgraded_tier', 'Pro');
-        window.location.href = data.checkout_url;
-    } catch (err) {
-        alert('Billing not available: ' + err.message);
-    }
-}
-
-async function upgradeToProPlus() {
-    // TODO: When Pro+ Stripe price is configured, point to Pro+ checkout
-    // For now, prompt that Pro+ is coming soon or use the same checkout
-    try {
-        const data = await api('/api/billing/checkout');
-        sessionStorage.setItem('just_upgraded', 'true');
-        sessionStorage.setItem('upgraded_tier', 'Pro+');
         window.location.href = data.checkout_url;
     } catch (err) {
         alert('Billing not available: ' + err.message);
@@ -906,15 +749,14 @@ async function renderBookingPage(username) {
     app.innerHTML = '<div class="loading">Loading booking page...</div>';
     
     try {
-        // Fetch public profile - NO AUTH HEADER
-        const profileRes = await fetch(`${API_URL}/api/public/${encodeURIComponent(username)}`);
+        // Fetch public profile
+        const profileRes = await fetch(`${API_URL}/api/public/${username}`);
         if (!profileRes.ok) {
-            const errorData = await profileRes.json().catch(() => ({}));
-            throw new Error(errorData.detail || 'User not found');
+            throw new Error('User not found');
         }
         bookingState.profile = await profileRes.json();
         
-        // Get availability for next 14 days - NO AUTH HEADER
+        // Get availability for next 14 days
         const today = new Date();
         const endDate = new Date(today);
         endDate.setDate(endDate.getDate() + 14);
@@ -922,9 +764,9 @@ async function renderBookingPage(username) {
         const startStr = today.toISOString().split('T')[0];
         const endStr = endDate.toISOString().split('T')[0];
         
-        const availRes = await fetch(`${API_URL}/api/public/${encodeURIComponent(username)}/availability?start_date=${startStr}&end_date=${endStr}`);
+        const availRes = await fetch(`${API_URL}/api/public/${username}/availability?start_date=${startStr}&end_date=${endStr}`);
         const availData = await availRes.json();
-        bookingState.availability = availData.availability || [];
+        bookingState.availability = availData.availability;
         
         // Reset selection
         bookingState.selectedDate = null;
@@ -939,7 +781,7 @@ async function renderBookingPage(username) {
                     <div class="auth-logo">
                         <h1>📅 ScheduleLink</h1>
                     </div>
-                    <div class="alert alert-error">User "${escapeHtml(username)}" not found</div>
+                    <div class="alert alert-error">User "${username}" not found</div>
                     <p style="text-align: center; color: var(--text-muted);">
                         The scheduling page you're looking for doesn't exist.
                     </p>
@@ -971,7 +813,7 @@ function renderBookingUI() {
         <div class="booking-page">
             <div class="booking-container">
                 <div class="host-info">
-                    <h1>Book a meeting with ${escapeHtml(profile.full_name || profile.username)}</h1>
+                    <h1>Book a meeting with ${profile.full_name || profile.username}</h1>
                     <p>${profile.meeting_duration} minute meeting</p>
                 </div>
                 
@@ -1040,12 +882,10 @@ function renderCalendarDays(datesWithSlots) {
     let html = '';
     const firstDayOffset = today.getDay();
     
-    // Add empty cells for days before today
     for (let i = 0; i < firstDayOffset; i++) {
         html += '<div class="calendar-day disabled"></div>';
     }
     
-    // Add 14 days starting from today
     for (let d = 0; d < 14; d++) {
         const date = new Date(today);
         date.setDate(today.getDate() + d);
@@ -1064,7 +904,6 @@ function renderCalendarDays(datesWithSlots) {
         html += `<div class="${className}" ${onClick}>${dayNum}</div>`;
     }
     
-    // Fill remaining cells in the last row
     const totalCells = firstDayOffset + 14;
     const remaining = (7 - (totalCells % 7)) % 7;
     for (let i = 0; i < remaining; i++) {
@@ -1095,8 +934,7 @@ async function handleBookingSubmit(e) {
     btn.textContent = 'Booking...';
     
     try {
-        // NO AUTH HEADER for public booking
-        const response = await fetch(`${API_URL}/api/public/${encodeURIComponent(username)}/book`, {
+        const response = await fetch(`${API_URL}/api/public/${username}/book`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1134,10 +972,10 @@ function showBookingConfirmation(booking) {
                 <div class="confirmation">
                     <div class="confirmation-icon">✓</div>
                     <h1>Booking Confirmed!</h1>
-                    <p>You're all set. A confirmation email has been sent to ${escapeHtml(booking.client_email)}.</p>
+                    <p>You're all set. A confirmation email has been sent to ${booking.client_email}.</p>
                     
                     <div class="confirmation-details">
-                        <p><strong>Meeting with:</strong> ${escapeHtml(bookingState.profile.full_name || bookingState.profile.username)}</p>
+                        <p><strong>Meeting with:</strong> ${bookingState.profile.full_name || bookingState.profile.username}</p>
                         <p><strong>Date:</strong> ${dateStr}</p>
                         <p><strong>Time:</strong> ${timeStr}</p>
                         <p><strong>Duration:</strong> ${bookingState.profile.meeting_duration} minutes</p>
@@ -1161,8 +999,7 @@ async function renderCancelPage(token) {
     app.innerHTML = '<div class="loading">Loading...</div>';
     
     try {
-        // NO AUTH HEADER for public cancellation
-        const response = await fetch(`${API_URL}/api/cancel/${encodeURIComponent(token)}`);
+        const response = await fetch(`${API_URL}/api/cancel/${token}`);
         if (!response.ok) throw new Error('Booking not found or already cancelled');
         
         const booking = await response.json();
@@ -1179,7 +1016,7 @@ async function renderCancelPage(token) {
                     </div>
                     <div id="cancel-content">
                         <div class="confirmation-details" style="margin: 0 0 24px;">
-                            <p><strong>Meeting with:</strong> ${escapeHtml(booking.host_name)}</p>
+                            <p><strong>Meeting with:</strong> ${booking.host_name}</p>
                             <p><strong>Date:</strong> ${dateStr}</p>
                             <p><strong>Time:</strong> ${timeStr}</p>
                         </div>
@@ -1195,7 +1032,7 @@ async function renderCancelPage(token) {
             <div class="auth-page">
                 <div class="auth-card">
                     <div class="auth-logo"><h1>📅 ScheduleLink</h1></div>
-                    <div class="alert alert-error">${escapeHtml(err.message)}</div>
+                    <div class="alert alert-error">${err.message}</div>
                     <a href="#/" class="btn btn-primary" style="width: 100%; margin-top: 16px;">Go Home</a>
                 </div>
             </div>
@@ -1206,8 +1043,7 @@ async function renderCancelPage(token) {
 async function confirmCancel(token) {
     const content = document.getElementById('cancel-content');
     try {
-        // NO AUTH HEADER for public cancellation
-        const response = await fetch(`${API_URL}/api/cancel/${encodeURIComponent(token)}`, { method: 'POST' });
+        const response = await fetch(`${API_URL}/api/cancel/${token}`, { method: 'POST' });
         if (!response.ok) throw new Error('Failed to cancel booking');
         content.innerHTML = `
             <div class="alert alert-success" style="margin-bottom: 24px;">✓ Meeting cancelled successfully</div>
@@ -1223,14 +1059,12 @@ async function confirmCancel(token) {
 window.addEventListener('hashchange', router);
 window.addEventListener('load', router);
 
-// Expose functions to window for onclick handlers
 window.logout = logout;
 window.copyBookingLink = copyBookingLink;
 window.cancelBooking = cancelBooking;
 window.connectGoogle = connectGoogle;
 window.disconnectGoogle = disconnectGoogle;
 window.upgradeToPro = upgradeToPro;
-window.upgradeToProPlus = upgradeToProPlus;
 window.manageBilling = manageBilling;
 window.selectDate = selectDate;
 window.selectSlot = selectSlot;

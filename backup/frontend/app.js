@@ -1,58 +1,16 @@
 /**
- * ScheduleLink - Frontend Application v2.1.0
- * Production-ready SPA with hash-based routing
- * 
- * Key Features:
- * - Public booking pages (NO auth required)
- * - Protected dashboard routes (auth required)
- * - Robust error handling
- * - Professional UI/UX
- * 
- * CRITICAL: Public routes NEVER check auth status
+ * ScheduleLink - Frontend Application
+ * Single-page app with hash-based routing
  */
 
-// API URL - always point to the Render backend API (Vercel is static-only)
-const API_URL = 'https://schedulelink-app.onrender.com';
-
-// ============== Subscription Tier Helpers ==============
-function getTierName(status) {
-    const tierMap = {
-        'pro_plus': 'Pro+',
-        'pro': 'Pro',
-        'free': 'Free'
-    };
-    return tierMap[status] || 'Free';
-}
-
-function getTierDisplay(isPaid, status) {
-    if (isPaid) {
-        const name = getTierName(status);
-        if (name === 'Pro+') return '<span class="subscription-badge pro-plus">✨ Pro+</span>';
-        if (name === 'Pro') return '<span class="subscription-badge pro">✨ Pro</span>';
-    }
-    return '<span class="subscription-badge free">Free</span>';
-}
-
-function showUpgradeBanner() {
-    // Check sessionStorage for just-upgraded flag (set after successful Stripe return)
-    const justUpgraded = sessionStorage.getItem('just_upgraded');
-    const tier = sessionStorage.getItem('upgraded_tier') || 'Pro';
-    if (justUpgraded === 'true') {
-        sessionStorage.removeItem('just_upgraded');
-        sessionStorage.removeItem('upgraded_tier');
-        return `<div class="alert alert-success upgrade-banner">
-            <strong>🎉 Welcome to ${tier}!</strong> Your upgrade is complete. Enjoy your new features!
-        </div>`;
-    }
-    return '';
-}
+const API_URL = 'http://192.168.1.227:8080';
+const APP_URL = 'http://localhost:3000';
 
 // ============== State ==============
 let state = {
     user: null,
-    token: localStorage.getItem('schedulelink_token'),
-    currentView: 'loading',
-    config: null
+    token: localStorage.getItem('token'),
+    currentView: 'loading'
 };
 
 // ============== API Client ==============
@@ -66,43 +24,35 @@ async function api(endpoint, options = {}) {
         headers['Authorization'] = `Bearer ${state.token}`;
     }
     
-    try {
-        const response = await fetch(`${API_URL}${endpoint}`, {
-            ...options,
-            headers
-        });
-        
-        // Handle 401 only for protected endpoints
-        if (response.status === 401 && !endpoint.startsWith('/api/public') && !endpoint.startsWith('/api/cancel')) {
-            logout();
-            throw new Error('Session expired. Please log in again.');
-        }
-        
-        const data = await response.json();
-        
-        if (!response.ok) {
-            throw new Error(data.detail || 'Request failed');
-        }
-        
-        return data;
-    } catch (err) {
-        if (err.name === 'TypeError' && err.message.includes('fetch')) {
-            throw new Error('Unable to connect to server. Please try again.');
-        }
-        throw err;
+    const response = await fetch(`${API_URL}${endpoint}`, {
+        ...options,
+        headers
+    });
+    
+    if (response.status === 401) {
+        logout();
+        throw new Error('Unauthorized');
     }
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+        throw new Error(data.detail || 'Request failed');
+    }
+    
+    return data;
 }
 
 // ============== Auth ==============
 function setToken(token) {
     state.token = token;
-    localStorage.setItem('schedulelink_token', token);
+    localStorage.setItem('token', token);
 }
 
 function logout() {
     state.token = null;
     state.user = null;
-    localStorage.removeItem('schedulelink_token');
+    localStorage.removeItem('token');
     navigate('login');
 }
 
@@ -114,7 +64,7 @@ async function checkAuth() {
         return true;
     } catch (e) {
         state.token = null;
-        localStorage.removeItem('schedulelink_token');
+        localStorage.removeItem('token');
         return false;
     }
 }
@@ -128,59 +78,32 @@ function navigate(view, params = {}) {
 }
 
 function parseHash() {
-    const hash = window.location.hash.slice(2) || '';
+    const hash = window.location.hash.slice(2) || 'dashboard';
     const [path, queryString] = hash.split('?');
     const params = new URLSearchParams(queryString || '');
-    return { path: path || '', params };
+    return { path, params };
 }
 
 async function router() {
     const { path, params } = parseHash();
     const app = document.getElementById('app');
     
-    // PUBLIC ROUTES - NO AUTH CHECK EVER
-    // These routes must work for anonymous visitors
-    
+    // Public routes — no auth check needed
     if (path === 'login') {
         app.innerHTML = renderLogin();
         return;
     }
-    
     if (path === 'register') {
         app.innerHTML = renderRegister();
         return;
     }
-    
     if (path.startsWith('book/')) {
         const username = path.split('/')[1];
-        if (username) {
-            await renderBookingPage(username);
-            return;
-        }
-    }
-    
-    if (path.startsWith('cancel/')) {
-        const token = path.split('/')[1];
-        if (token) {
-            await renderCancelPage(token);
-            return;
-        }
-    }
-    
-    // Default to login/dashboard based on auth
-    if (!path) {
-        if (state.token) {
-            const isAuth = await checkAuth();
-            if (isAuth) {
-                navigate('dashboard');
-                return;
-            }
-        }
-        navigate('login');
+        await renderBookingPage(username);
         return;
     }
     
-    // PROTECTED ROUTES - AUTH REQUIRED
+    // All other routes require auth — check first
     const isAuth = await checkAuth();
     if (!isAuth) {
         navigate('login');
@@ -209,8 +132,6 @@ async function router() {
 
 // ============== Layout ==============
 function renderLayout(content, activePath) {
-    const badge = getTierDisplay(state.user?.subscription_status && state.user?.subscription_status !== 'free', state.user?.subscription_status);
-    
     return `
         <header class="header">
             <div class="container header-content">
@@ -221,8 +142,7 @@ function renderLayout(content, activePath) {
                     <a href="#/settings" class="${activePath === 'settings' ? 'active' : ''}">Settings</a>
                 </nav>
                 <div class="user-menu">
-                    ${badge}
-                    <span class="user-name">${state.user?.full_name || state.user?.email}</span>
+                    <span class="user-name">${state.user.full_name || state.user.email}</span>
                     <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
                 </div>
             </div>
@@ -234,29 +154,12 @@ function renderLayout(content, activePath) {
 }
 
 // ============== Login Page ==============
-function renderPublicHeader(active) {
-    return `
-        <header class="public-header">
-            <div class="container public-header-content">
-                <a href="#/" class="public-logo">📅 ScheduleLink</a>
-                <div class="public-header-actions">
-                    ${active === 'login' 
-                        ? '<a href="#/register" class="btn-sign-up">Create Account</a>'
-                        : '<a href="#/login" class="btn-sign-in-landing">Sign In</a>'
-                    }
-                </div>
-            </div>
-        </header>
-    `;
-}
-
 function renderLogin() {
     setTimeout(() => {
         document.getElementById('login-form')?.addEventListener('submit', handleLogin);
     }, 0);
     
     return `
-        ${renderPublicHeader('login')}
         <div class="auth-page">
             <div class="auth-card">
                 <div class="auth-logo">
@@ -269,12 +172,12 @@ function renderLogin() {
                     
                     <div class="form-group">
                         <label class="form-label">Email</label>
-                        <input type="email" name="email" class="form-input" placeholder="you@example.com" required>
+                        <input type="email" name="email" class="form-input" required>
                     </div>
                     
                     <div class="form-group">
                         <label class="form-label">Password</label>
-                        <input type="password" name="password" class="form-input" placeholder="••••••••" required>
+                        <input type="password" name="password" class="form-input" required>
                     </div>
                     
                     <button type="submit" class="btn btn-primary btn-lg" style="width: 100%;">
@@ -294,11 +197,6 @@ async function handleLogin(e) {
     e.preventDefault();
     const form = e.target;
     const errorEl = document.getElementById('login-error');
-    const btn = form.querySelector('button[type="submit"]');
-    
-    btn.disabled = true;
-    btn.textContent = 'Signing in...';
-    errorEl.style.display = 'none';
     
     try {
         const data = await api('/api/auth/login', {
@@ -314,8 +212,6 @@ async function handleLogin(e) {
     } catch (err) {
         errorEl.textContent = err.message;
         errorEl.style.display = 'block';
-        btn.disabled = false;
-        btn.textContent = 'Sign In';
     }
 }
 
@@ -326,7 +222,6 @@ function renderRegister() {
     }, 0);
     
     return `
-        ${renderPublicHeader('register')}
         <div class="auth-page">
             <div class="auth-card">
                 <div class="auth-logo">
@@ -344,21 +239,19 @@ function renderRegister() {
                     
                     <div class="form-group">
                         <label class="form-label">Email</label>
-                        <input type="email" name="email" class="form-input" placeholder="you@example.com" required>
+                        <input type="email" name="email" class="form-input" required>
                     </div>
                     
                     <div class="form-group">
                         <label class="form-label">Username</label>
                         <input type="text" name="username" class="form-input" required 
-                               pattern="[a-z0-9-]+" placeholder="john-smith" 
-                               oninput="this.value = this.value.toLowerCase().replace(/[^a-z0-9-]/g, '')">
-                        <p class="form-hint">Your booking link: ${window.location.origin}/#/book/<strong>your-username</strong></p>
+                               pattern="[a-z0-9-]+" placeholder="john-smith">
+                        <p class="form-hint">This will be your booking link: schedulelink.com/book/your-username</p>
                     </div>
                     
                     <div class="form-group">
                         <label class="form-label">Password</label>
-                        <input type="password" name="password" class="form-input" placeholder="••••••••" required minlength="6">
-                        <p class="form-hint">At least 6 characters</p>
+                        <input type="password" name="password" class="form-input" required minlength="6">
                     </div>
                     
                     <button type="submit" class="btn btn-primary btn-lg" style="width: 100%;">
@@ -378,11 +271,6 @@ async function handleRegister(e) {
     e.preventDefault();
     const form = e.target;
     const errorEl = document.getElementById('register-error');
-    const btn = form.querySelector('button[type="submit"]');
-    
-    btn.disabled = true;
-    btn.textContent = 'Creating account...';
-    errorEl.style.display = 'none';
     
     try {
         const data = await api('/api/auth/register', {
@@ -390,7 +278,7 @@ async function handleRegister(e) {
             body: JSON.stringify({
                 email: form.email.value,
                 password: form.password.value,
-                username: form.username.value.toLowerCase(),
+                username: form.username.value,
                 full_name: form.full_name.value || null
             })
         });
@@ -400,27 +288,16 @@ async function handleRegister(e) {
     } catch (err) {
         errorEl.textContent = err.message;
         errorEl.style.display = 'block';
-        btn.disabled = false;
-        btn.textContent = 'Create Account';
     }
 }
 
 // ============== Dashboard ==============
 async function renderDashboard() {
-    let bookings = [];
-    try {
-        bookings = await api('/api/bookings/upcoming');
-    } catch (e) {
-        console.error('Failed to load bookings:', e);
-    }
-    
-    const bookingLink = `${window.location.origin}/#/book/${state.user.username}`;
-    const tierName = getTierName(state.user.subscription_status);
-    const upgradeBanner = showUpgradeBanner();
+    const bookings = await api('/api/bookings/upcoming');
+    const bookingLink = `${APP_URL}/#/book/${state.user.username}`;
     
     return `
         <div class="dashboard">
-            ${upgradeBanner}
             <div class="dashboard-header">
                 <h1>Welcome back, ${state.user.full_name || state.user.username}!</h1>
                 <p>Manage your bookings and availability</p>
@@ -428,17 +305,17 @@ async function renderDashboard() {
             
             <div class="booking-link-card">
                 <h3>Your Booking Link</h3>
-                <div class="booking-link-wrapper">
+                <div class="booking-link">
                     <input type="text" value="${bookingLink}" readonly id="booking-link-input">
-                    <button class="booking-link-copy" onclick="copyBookingLink()">📋 Copy</button>
+                    <button onclick="copyBookingLink()">Copy</button>
                 </div>
             </div>
             
             <div class="google-status ${state.user.google_connected ? 'connected' : 'disconnected'}">
                 ${state.user.google_connected 
-                    ? '✓ Google Calendar connected — bookings sync automatically' 
+                    ? '✓ Google Calendar connected' 
                     : '⚠ Google Calendar not connected'}
-                <a href="#/settings">
+                <a href="#/settings" style="margin-left: auto;">
                     ${state.user.google_connected ? 'Manage' : 'Connect'}
                 </a>
             </div>
@@ -453,36 +330,10 @@ async function renderDashboard() {
                     <div class="value">${state.user.meeting_duration}m</div>
                 </div>
                 <div class="stat-card">
-                    <div class="label">Current Plan</div>
-                    <div class="value plan-value">${tierName}</div>
+                    <div class="label">Account Type</div>
+                    <div class="value">${state.user.is_paid ? 'Pro' : 'Free'}</div>
                 </div>
             </div>
-            
-            ${state.user.subscription_status && state.user.subscription_status !== 'free' ? `
-                <div class="card plan-card">
-                    <div class="plan-card-content">
-                        <span class="plan-card-icon">✨</span>
-                        <div>
-                            <h3 class="card-title">${tierName} Member</h3>
-                            <p style="color: var(--text-secondary); margin-top: 4px;">You're all set! Enjoy unlimited bookings and all ${tierName} features.</p>
-                        </div>
-                    </div>
-                </div>
-            ` : `
-                <div class="card" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1)); border-color: var(--primary);">
-                    <h3 class="card-title">✨ Upgrade to Pro</h3>
-                    <p style="margin-bottom: 20px; color: var(--text-secondary);">
-                        Get unlimited bookings, priority support, and help us keep ScheduleLink running.
-                    </p>
-                    <ul style="margin-bottom: 24px; color: var(--text-secondary); list-style: none;">
-                        <li style="margin-bottom: 8px;">✓ Unlimited bookings</li>
-                        <li style="margin-bottom: 8px;">✓ 7-day free trial</li>
-                        <li style="margin-bottom: 8px;">✓ Priority email support</li>
-                        <li>✓ Cancel anytime</li>
-                    </ul>
-                    <button class="btn btn-primary btn-lg" onclick="upgradeToPro()">Upgrade Now — $5/month</button>
-                </div>
-            `}
             
             <div class="card">
                 <div class="card-header">
@@ -491,8 +342,8 @@ async function renderDashboard() {
                 </div>
                 
                 ${bookings.length === 0 
-                    ? '<div class="empty-state"><p>No upcoming meetings. Share your booking link to get started!</p></div>'
-                    : bookings.slice(0, 5).map(b => renderBookingItem(b)).join('')
+                    ? '<div class="empty-state"><p>No upcoming meetings</p></div>'
+                    : bookings.map(b => renderBookingItem(b)).join('')
                 }
             </div>
         </div>
@@ -507,8 +358,8 @@ function renderBookingItem(booking) {
     return `
         <div class="booking-item">
             <div class="booking-info">
-                <h4>${escapeHtml(booking.client_name)}</h4>
-                <p>${escapeHtml(booking.client_email)}</p>
+                <h4>${booking.client_name}</h4>
+                <p>${booking.client_email}</p>
             </div>
             <div class="booking-time">
                 <div class="date">${dateStr}</div>
@@ -518,33 +369,16 @@ function renderBookingItem(booking) {
     `;
 }
 
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
 function copyBookingLink() {
     const input = document.getElementById('booking-link-input');
     input.select();
-    input.setSelectionRange(0, 99999);
-    
-    navigator.clipboard.writeText(input.value).then(() => {
-        const btn = input.nextElementSibling;
-        btn.textContent = '✓ Copied!';
-        setTimeout(() => { btn.textContent = '📋 Copy'; }, 2000);
-    });
+    document.execCommand('copy');
+    alert('Link copied!');
 }
 
 // ============== Bookings Page ==============
 async function renderBookings() {
-    let bookings = [];
-    try {
-        bookings = await api('/api/bookings');
-    } catch (e) {
-        console.error('Failed to load bookings:', e);
-    }
+    const bookings = await api('/api/bookings');
     
     return `
         <div class="dashboard">
@@ -573,15 +407,15 @@ function renderBookingItemFull(booking) {
     return `
         <div class="booking-item" style="${isCancelled ? 'opacity: 0.5;' : ''}">
             <div class="booking-info">
-                <h4>${escapeHtml(booking.client_name)} ${isCancelled ? '<span style="color: var(--danger);">(Cancelled)</span>' : ''}</h4>
-                <p>${escapeHtml(booking.client_email)}${booking.client_phone ? ' • ' + escapeHtml(booking.client_phone) : ''}</p>
-                ${booking.notes ? `<p style="margin-top: 8px; font-style: italic; color: var(--text-muted);">"${escapeHtml(booking.notes)}"</p>` : ''}
+                <h4>${booking.client_name} ${isCancelled ? '(Cancelled)' : ''}</h4>
+                <p>${booking.client_email}${booking.client_phone ? ' • ' + booking.client_phone : ''}</p>
+                ${booking.notes ? `<p style="margin-top: 8px; font-style: italic;">${booking.notes}</p>` : ''}
             </div>
             <div class="booking-time">
                 <div class="date">${dateStr}</div>
                 <div class="time">${timeStr}</div>
                 ${!isCancelled && !isPast 
-                    ? `<button class="btn btn-danger btn-sm" style="margin-top: 12px;" onclick="cancelBooking(${booking.id})">Cancel</button>`
+                    ? `<button class="btn btn-danger btn-sm" style="margin-top: 8px;" onclick="cancelBooking(${booking.id})">Cancel</button>`
                     : ''
                 }
             </div>
@@ -590,7 +424,7 @@ function renderBookingItemFull(booking) {
 }
 
 async function cancelBooking(id) {
-    if (!confirm('Are you sure you want to cancel this booking? The client will be notified.')) return;
+    if (!confirm('Are you sure you want to cancel this booking?')) return;
     
     try {
         await api(`/api/bookings/${id}`, { method: 'DELETE' });
@@ -602,45 +436,14 @@ async function cancelBooking(id) {
 
 // ============== Settings Page ==============
 async function renderSettings(params) {
-    let workingHours = [];
-    try {
-        workingHours = await api('/api/working-hours');
-    } catch (e) {
-        console.error('Failed to load working hours:', e);
-    }
-    
+    const workingHours = await api('/api/working-hours');
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    
-    // Check for tier param from Stripe return (for immediate tier detection)
-    const tierParam = params.get('tier');
-    if (tierParam) {
-        sessionStorage.setItem('just_upgraded', 'true');
-        sessionStorage.setItem('upgraded_tier', tierParam === 'pro_plus' ? 'Pro+' : 'Pro');
-    }
-    
-    // Refresh user data on settings load to get latest subscription status
-    try {
-        state.user = await api('/api/auth/me');
-    } catch (e) {}
-    
-    const tierName = getTierName(state.user.subscription_status);
-    const isProPlus = tierName === 'Pro+';
-    const isPro = tierName === 'Pro';
-    const isPaid = state.user.subscription_status && state.user.subscription_status !== 'free';
     
     let alerts = '';
     if (params.get('google') === 'connected') {
-        alerts = '<div class="alert alert-success">✓ Google Calendar connected successfully!</div>';
+        alerts = '<div class="alert alert-success">Google Calendar connected successfully!</div>';
     } else if (params.get('google') === 'error') {
-        alerts = '<div class="alert alert-error">Failed to connect Google Calendar. Please try again.</div>';
-    }
-    if (params.get('billing') === 'success') {
-        const upgradedTier = params.get('tier') === 'pro_plus' ? 'Pro+' : 'Pro';
-        alerts = `<div class="alert alert-success upgrade-success-banner">
-            <strong>🎉 Welcome to ${upgradedTier}!</strong> Your upgrade is complete. You now have access to all ${upgradedTier} features!
-        </div>`;
-    } else if (params.get('billing') === 'cancelled') {
-        alerts = '<div class="alert alert-info">Checkout was cancelled. You can upgrade anytime.</div>';
+        alerts = `<div class="alert alert-error">Failed to connect Google Calendar: ${params.get('message') || 'Unknown error'}</div>`;
     }
     
     setTimeout(() => {
@@ -662,11 +465,11 @@ async function renderSettings(params) {
                 <form id="settings-form">
                     <div class="form-group">
                         <label class="form-label">Full Name</label>
-                        <input type="text" name="full_name" class="form-input" value="${escapeHtml(state.user.full_name || '')}" placeholder="Your name">
+                        <input type="text" name="full_name" class="form-input" value="${state.user.full_name || ''}">
                     </div>
                     
                     <div class="form-group">
-                        <label class="form-label">Meeting Duration</label>
+                        <label class="form-label">Meeting Duration (minutes)</label>
                         <select name="meeting_duration" class="form-select">
                             <option value="15" ${state.user.meeting_duration === 15 ? 'selected' : ''}>15 minutes</option>
                             <option value="30" ${state.user.meeting_duration === 30 ? 'selected' : ''}>30 minutes</option>
@@ -676,13 +479,12 @@ async function renderSettings(params) {
                     </div>
                     
                     <div class="form-group">
-                        <label class="form-label">Buffer Between Meetings</label>
+                        <label class="form-label">Buffer Time Between Meetings (minutes)</label>
                         <select name="buffer_time" class="form-select">
                             <option value="0" ${state.user.buffer_time === 0 ? 'selected' : ''}>No buffer</option>
                             <option value="5" ${state.user.buffer_time === 5 ? 'selected' : ''}>5 minutes</option>
                             <option value="10" ${state.user.buffer_time === 10 ? 'selected' : ''}>10 minutes</option>
                             <option value="15" ${state.user.buffer_time === 15 ? 'selected' : ''}>15 minutes</option>
-                            <option value="30" ${state.user.buffer_time === 30 ? 'selected' : ''}>30 minutes</option>
                         </select>
                     </div>
                     
@@ -697,14 +499,11 @@ async function renderSettings(params) {
                         <div class="google-status connected" style="margin-bottom: 16px;">
                             ✓ Connected to Google Calendar
                         </div>
-                        <p style="margin-bottom: 16px; color: var(--text-muted);">
-                            Your bookings automatically sync to your calendar and show your real availability.
-                        </p>
                         <button class="btn btn-secondary" onclick="disconnectGoogle()">Disconnect</button>
                     `
                     : `
                         <p style="margin-bottom: 16px; color: var(--text-muted);">
-                            Connect your Google Calendar to automatically show your real availability and create events for bookings.
+                            Connect your Google Calendar to automatically show your availability and create events for bookings.
                         </p>
                         <button class="btn btn-primary" onclick="connectGoogle()">Connect Google Calendar</button>
                     `
@@ -713,7 +512,6 @@ async function renderSettings(params) {
             
             <div class="card">
                 <h3 class="card-title">Working Hours</h3>
-                <p style="margin-bottom: 20px; color: var(--text-muted);">Set when you're available for bookings</p>
                 <form id="working-hours-form">
                     <div class="working-hours">
                         ${days.map((day, i) => {
@@ -721,8 +519,8 @@ async function renderSettings(params) {
                             return `
                                 <div class="day-row">
                                     <div class="day-toggle">
-                                        <input type="checkbox" id="enabled_${i}" name="enabled_${i}" ${wh.is_enabled ? 'checked' : ''}>
-                                        <label for="enabled_${i}">${day}</label>
+                                        <input type="checkbox" name="enabled_${i}" ${wh.is_enabled ? 'checked' : ''}>
+                                        <label>${day}</label>
                                     </div>
                                     <div class="time-inputs">
                                         <input type="time" name="start_${i}" value="${wh.start_time}">
@@ -733,46 +531,19 @@ async function renderSettings(params) {
                             `;
                         }).join('')}
                     </div>
-                    <button type="submit" class="btn btn-primary" style="margin-top: 24px;">Save Working Hours</button>
+                    <button type="submit" class="btn btn-primary" style="margin-top: 20px;">Save Working Hours</button>
                 </form>
             </div>
             
-            ${!isPaid ? `
-                <div class="card" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1)); border-color: var(--primary);">
-                    <h3 class="card-title">✨ Upgrade to Pro</h3>
-                    <p style="margin-bottom: 20px; color: var(--text-secondary);">
-                        Get unlimited bookings, priority support, and help us keep ScheduleLink running.
-                    </p>
-                    <ul style="margin-bottom: 24px; color: var(--text-secondary); list-style: none;">
-                        <li style="margin-bottom: 8px;">✓ Unlimited bookings</li>
-                        <li style="margin-bottom: 8px;">✓ 7-day free trial</li>
-                        <li style="margin-bottom: 8px;">✓ Priority email support</li>
-                        <li>✓ Cancel anytime</li>
-                    </ul>
-                    <button class="btn btn-primary btn-lg" onclick="upgradeToPro()">Upgrade Now — $5/month</button>
-                </div>
-            ` : isProPlus ? `
+            ${!state.user.is_paid ? `
                 <div class="card">
-                    <h3 class="card-title">✨ Pro+ Subscription</h3>
-                    <div class="google-status connected" style="margin-bottom: 16px;">
-                        ✓ You're on the <strong>Pro+</strong> plan — the best ScheduleLink has to offer!
-                    </div>
-                    <p style="color: var(--text-secondary); margin-bottom: 16px;">You have access to all features. Manage your subscription below.</p>
-                    <button class="btn btn-secondary" onclick="manageBilling()">Manage Billing</button>
-                </div>
-            ` : `
-                <div class="card">
-                    <h3 class="card-title">✨ Pro Subscription</h3>
-                    <div class="google-status connected" style="margin-bottom: 16px;">
-                        ✓ You're on the <strong>Pro</strong> plan
-                    </div>
-                    <p style="color: var(--text-secondary); margin-bottom: 16px;">
-                        Want more? Upgrade to <strong>Pro+</strong> for additional features.
+                    <h3 class="card-title">Upgrade to Pro</h3>
+                    <p style="margin-bottom: 16px; color: var(--text-muted);">
+                        Get unlimited bookings, custom branding, and priority support for $5/month.
                     </p>
-                    <button class="btn btn-primary" onclick="upgradeToProPlus()">Upgrade to Pro+</button>
-                    <button class="btn btn-secondary" style="margin-left: 12px;" onclick="manageBilling()">Manage Billing</button>
+                    <button class="btn btn-success" onclick="upgradeToPro()">Upgrade Now - $5/month</button>
                 </div>
-            `}
+            ` : ''}
         </div>
     `;
 }
@@ -780,10 +551,6 @@ async function renderSettings(params) {
 async function handleSettingsSave(e) {
     e.preventDefault();
     const form = e.target;
-    const btn = form.querySelector('button[type="submit"]');
-    
-    btn.disabled = true;
-    btn.textContent = 'Saving...';
     
     try {
         await api('/api/settings', {
@@ -795,23 +562,17 @@ async function handleSettingsSave(e) {
             })
         });
         
+        alert('Settings saved!');
         state.user = await api('/api/auth/me');
-        btn.textContent = '✓ Saved!';
-        setTimeout(() => { btn.textContent = 'Save Profile'; btn.disabled = false; }, 2000);
+        router();
     } catch (err) {
         alert('Failed to save: ' + err.message);
-        btn.disabled = false;
-        btn.textContent = 'Save Profile';
     }
 }
 
 async function handleWorkingHoursSave(e) {
     e.preventDefault();
     const form = e.target;
-    const btn = form.querySelector('button[type="submit"]');
-    
-    btn.disabled = true;
-    btn.textContent = 'Saving...';
     
     const hours = [];
     for (let i = 0; i < 7; i++) {
@@ -828,12 +589,9 @@ async function handleWorkingHoursSave(e) {
             method: 'PUT',
             body: JSON.stringify(hours)
         });
-        btn.textContent = '✓ Saved!';
-        setTimeout(() => { btn.textContent = 'Save Working Hours'; btn.disabled = false; }, 2000);
+        alert('Working hours saved!');
     } catch (err) {
         alert('Failed to save: ' + err.message);
-        btn.disabled = false;
-        btn.textContent = 'Save Working Hours';
     }
 }
 
@@ -847,7 +605,7 @@ async function connectGoogle() {
 }
 
 async function disconnectGoogle() {
-    if (!confirm('Disconnect Google Calendar? Your bookings will no longer sync.')) return;
+    if (!confirm('Disconnect Google Calendar?')) return;
     
     try {
         await api('/api/auth/google/disconnect', { method: 'POST' });
@@ -861,34 +619,9 @@ async function disconnectGoogle() {
 async function upgradeToPro() {
     try {
         const data = await api('/api/billing/checkout');
-        // Set flag so dashboard shows welcome banner on return
-        sessionStorage.setItem('just_upgraded', 'true');
-        sessionStorage.setItem('upgraded_tier', 'Pro');
         window.location.href = data.checkout_url;
     } catch (err) {
-        alert('Billing not available: ' + err.message);
-    }
-}
-
-async function upgradeToProPlus() {
-    // TODO: When Pro+ Stripe price is configured, point to Pro+ checkout
-    // For now, prompt that Pro+ is coming soon or use the same checkout
-    try {
-        const data = await api('/api/billing/checkout');
-        sessionStorage.setItem('just_upgraded', 'true');
-        sessionStorage.setItem('upgraded_tier', 'Pro+');
-        window.location.href = data.checkout_url;
-    } catch (err) {
-        alert('Billing not available: ' + err.message);
-    }
-}
-
-async function manageBilling() {
-    try {
-        const data = await api('/api/billing/portal');
-        window.location.href = data.portal_url;
-    } catch (err) {
-        alert('Failed to open billing portal: ' + err.message);
+        alert('Billing not configured: ' + err.message);
     }
 }
 
@@ -903,18 +636,10 @@ let bookingState = {
 async function renderBookingPage(username) {
     const app = document.getElementById('app');
     
-    app.innerHTML = '<div class="loading">Loading booking page...</div>';
-    
     try {
-        // Fetch public profile - NO AUTH HEADER
-        const profileRes = await fetch(`${API_URL}/api/public/${encodeURIComponent(username)}`);
-        if (!profileRes.ok) {
-            const errorData = await profileRes.json().catch(() => ({}));
-            throw new Error(errorData.detail || 'User not found');
-        }
-        bookingState.profile = await profileRes.json();
+        bookingState.profile = await fetch(`${API_URL}/api/public/${username}`).then(r => r.json());
         
-        // Get availability for next 14 days - NO AUTH HEADER
+        // Get availability for next 14 days
         const today = new Date();
         const endDate = new Date(today);
         endDate.setDate(endDate.getDate() + 14);
@@ -922,13 +647,9 @@ async function renderBookingPage(username) {
         const startStr = today.toISOString().split('T')[0];
         const endStr = endDate.toISOString().split('T')[0];
         
-        const availRes = await fetch(`${API_URL}/api/public/${encodeURIComponent(username)}/availability?start_date=${startStr}&end_date=${endStr}`);
+        const availRes = await fetch(`${API_URL}/api/public/${username}/availability?start_date=${startStr}&end_date=${endStr}`);
         const availData = await availRes.json();
-        bookingState.availability = availData.availability || [];
-        
-        // Reset selection
-        bookingState.selectedDate = null;
-        bookingState.selectedSlot = null;
+        bookingState.availability = availData.availability;
         
         app.innerHTML = renderBookingUI();
         
@@ -936,14 +657,9 @@ async function renderBookingPage(username) {
         app.innerHTML = `
             <div class="auth-page">
                 <div class="auth-card">
-                    <div class="auth-logo">
-                        <h1>📅 ScheduleLink</h1>
-                    </div>
-                    <div class="alert alert-error">User "${escapeHtml(username)}" not found</div>
-                    <p style="text-align: center; color: var(--text-muted);">
-                        The scheduling page you're looking for doesn't exist.
-                    </p>
-                    <a href="#/login" class="btn btn-primary" style="width: 100%; margin-top: 24px;">Go to Login</a>
+                    <h1>User not found</h1>
+                    <p>The scheduling page you're looking for doesn't exist.</p>
+                    <a href="#/login" class="btn btn-primary" style="margin-top: 20px;">Go to Login</a>
                 </div>
             </div>
         `;
@@ -954,10 +670,12 @@ function renderBookingUI() {
     const { profile, availability, selectedDate, selectedSlot } = bookingState;
     const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     
+    // Get dates with available slots
     const datesWithSlots = new Set(
         availability.filter(d => d.slots.length > 0).map(d => d.date)
     );
     
+    // Get slots for selected date
     const dayAvail = selectedDate 
         ? availability.find(d => d.date === selectedDate)
         : null;
@@ -971,7 +689,7 @@ function renderBookingUI() {
         <div class="booking-page">
             <div class="booking-container">
                 <div class="host-info">
-                    <h1>Book a meeting with ${escapeHtml(profile.full_name || profile.username)}</h1>
+                    <h1>Schedule a meeting with ${profile.full_name || profile.username}</h1>
                     <p>${profile.meeting_duration} minute meeting</p>
                 </div>
                 
@@ -985,9 +703,9 @@ function renderBookingUI() {
                 
                 ${selectedDate ? `
                     <div class="card">
-                        <h3 class="card-title">Select a Time — ${formatDateLong(selectedDate)}</h3>
+                        <h3 class="card-title">Select a Time - ${formatDateLong(selectedDate)}</h3>
                         ${slots.length === 0 
-                            ? '<div class="empty-state"><p>No available times on this date</p></div>'
+                            ? '<p class="empty-state">No available times on this date</p>'
                             : `<div class="time-slots">
                                 ${slots.map(s => {
                                     const time = new Date(s.start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
@@ -1005,22 +723,22 @@ function renderBookingUI() {
                         <form id="booking-form">
                             <div class="form-group">
                                 <label class="form-label">Name *</label>
-                                <input type="text" name="client_name" class="form-input" placeholder="Your name" required>
+                                <input type="text" name="client_name" class="form-input" required>
                             </div>
                             
                             <div class="form-group">
                                 <label class="form-label">Email *</label>
-                                <input type="email" name="client_email" class="form-input" placeholder="you@example.com" required>
+                                <input type="email" name="client_email" class="form-input" required>
                             </div>
                             
                             <div class="form-group">
-                                <label class="form-label">Phone (optional)</label>
-                                <input type="tel" name="client_phone" class="form-input" placeholder="+1 (555) 123-4567">
+                                <label class="form-label">Phone</label>
+                                <input type="tel" name="client_phone" class="form-input">
                             </div>
                             
                             <div class="form-group">
-                                <label class="form-label">Notes (optional)</label>
-                                <textarea name="notes" class="form-textarea" placeholder="Anything you'd like to discuss..."></textarea>
+                                <label class="form-label">Notes</label>
+                                <textarea name="notes" class="form-textarea" placeholder="Anything you'd like us to know..."></textarea>
                             </div>
                             
                             <button type="submit" class="btn btn-primary btn-lg" style="width: 100%;">
@@ -1036,39 +754,35 @@ function renderBookingUI() {
 
 function renderCalendarDays(datesWithSlots) {
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    let html = '';
-    const firstDayOffset = today.getDay();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    const startOffset = firstDay.getDay();
     
-    // Add empty cells for days before today
-    for (let i = 0; i < firstDayOffset; i++) {
+    let html = '';
+    
+    // Empty cells for offset
+    for (let i = 0; i < startOffset; i++) {
         html += '<div class="calendar-day disabled"></div>';
     }
     
-    // Add 14 days starting from today
-    for (let d = 0; d < 14; d++) {
+    // Days of current and next month
+    for (let d = 0; d < 35 - startOffset; d++) {
         const date = new Date(today);
         date.setDate(today.getDate() + d);
         const dateStr = date.toISOString().split('T')[0];
         const dayNum = date.getDate();
         
         const hasSlots = datesWithSlots.has(dateStr);
+        const isPast = date < new Date(today.setHours(0,0,0,0));
         const isSelected = bookingState.selectedDate === dateStr;
         
         let className = 'calendar-day';
         if (isSelected) className += ' selected';
         else if (hasSlots) className += ' has-slots';
-        if (!hasSlots) className += ' disabled';
+        if (isPast) className += ' disabled';
         
-        const onClick = hasSlots ? `onclick="selectDate('${dateStr}')"` : '';
+        const onClick = hasSlots && !isPast ? `onclick="selectDate('${dateStr}')"` : '';
+        
         html += `<div class="${className}" ${onClick}>${dayNum}</div>`;
-    }
-    
-    // Fill remaining cells in the last row
-    const totalCells = firstDayOffset + 14;
-    const remaining = (7 - (totalCells % 7)) % 7;
-    for (let i = 0; i < remaining; i++) {
-        html += '<div class="calendar-day disabled"></div>';
     }
     
     return html;
@@ -1089,14 +803,9 @@ async function handleBookingSubmit(e) {
     e.preventDefault();
     const form = e.target;
     const username = bookingState.profile.username;
-    const btn = form.querySelector('button[type="submit"]');
-    
-    btn.disabled = true;
-    btn.textContent = 'Booking...';
     
     try {
-        // NO AUTH HEADER for public booking
-        const response = await fetch(`${API_URL}/api/public/${encodeURIComponent(username)}/book`, {
+        const booking = await fetch(`${API_URL}/api/public/${username}/book`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1106,20 +815,13 @@ async function handleBookingSubmit(e) {
                 start_time: bookingState.selectedSlot.start,
                 notes: form.notes.value || null
             })
-        });
+        }).then(r => r.json());
         
-        const data = await response.json();
-        
-        if (!response.ok) {
-            throw new Error(data.detail || 'Booking failed');
-        }
-        
-        showBookingConfirmation(data);
+        // Show confirmation
+        showBookingConfirmation(booking);
         
     } catch (err) {
-        alert(err.message);
-        btn.disabled = false;
-        btn.textContent = 'Confirm Booking';
+        alert('Failed to book: ' + err.message);
     }
 }
 
@@ -1134,10 +836,10 @@ function showBookingConfirmation(booking) {
                 <div class="confirmation">
                     <div class="confirmation-icon">✓</div>
                     <h1>Booking Confirmed!</h1>
-                    <p>You're all set. A confirmation email has been sent to ${escapeHtml(booking.client_email)}.</p>
+                    <p>You're all set. A confirmation email has been sent to ${booking.client_email}.</p>
                     
                     <div class="confirmation-details">
-                        <p><strong>Meeting with:</strong> ${escapeHtml(bookingState.profile.full_name || bookingState.profile.username)}</p>
+                        <p><strong>Meeting with:</strong> ${bookingState.profile.full_name || bookingState.profile.username}</p>
                         <p><strong>Date:</strong> ${dateStr}</p>
                         <p><strong>Time:</strong> ${timeStr}</p>
                         <p><strong>Duration:</strong> ${bookingState.profile.meeting_duration} minutes</p>
@@ -1155,83 +857,16 @@ function formatDateLong(dateStr) {
     return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
-// ============== Cancel Page ==============
-async function renderCancelPage(token) {
-    const app = document.getElementById('app');
-    app.innerHTML = '<div class="loading">Loading...</div>';
-    
-    try {
-        // NO AUTH HEADER for public cancellation
-        const response = await fetch(`${API_URL}/api/cancel/${encodeURIComponent(token)}`);
-        if (!response.ok) throw new Error('Booking not found or already cancelled');
-        
-        const booking = await response.json();
-        const start = new Date(booking.start_time);
-        const dateStr = start.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-        const timeStr = start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-        
-        app.innerHTML = `
-            <div class="auth-page">
-                <div class="auth-card">
-                    <div class="auth-logo">
-                        <h1>📅 ScheduleLink</h1>
-                        <p>Cancel your booking</p>
-                    </div>
-                    <div id="cancel-content">
-                        <div class="confirmation-details" style="margin: 0 0 24px;">
-                            <p><strong>Meeting with:</strong> ${escapeHtml(booking.host_name)}</p>
-                            <p><strong>Date:</strong> ${dateStr}</p>
-                            <p><strong>Time:</strong> ${timeStr}</p>
-                        </div>
-                        <p style="text-align: center; color: var(--text-muted); margin-bottom: 24px;">Are you sure you want to cancel?</p>
-                        <button class="btn btn-danger btn-lg" style="width: 100%;" onclick="confirmCancel('${token}')">Cancel Meeting</button>
-                        <a href="#/" class="btn btn-secondary" style="width: 100%; margin-top: 12px; display: block; text-align: center;">Keep Meeting</a>
-                    </div>
-                </div>
-            </div>
-        `;
-    } catch (err) {
-        app.innerHTML = `
-            <div class="auth-page">
-                <div class="auth-card">
-                    <div class="auth-logo"><h1>📅 ScheduleLink</h1></div>
-                    <div class="alert alert-error">${escapeHtml(err.message)}</div>
-                    <a href="#/" class="btn btn-primary" style="width: 100%; margin-top: 16px;">Go Home</a>
-                </div>
-            </div>
-        `;
-    }
-}
-
-async function confirmCancel(token) {
-    const content = document.getElementById('cancel-content');
-    try {
-        // NO AUTH HEADER for public cancellation
-        const response = await fetch(`${API_URL}/api/cancel/${encodeURIComponent(token)}`, { method: 'POST' });
-        if (!response.ok) throw new Error('Failed to cancel booking');
-        content.innerHTML = `
-            <div class="alert alert-success" style="margin-bottom: 24px;">✓ Meeting cancelled successfully</div>
-            <p style="text-align: center; color: var(--text-muted);">Both you and the host have been notified.</p>
-            <a href="#/" class="btn btn-primary" style="width: 100%; margin-top: 24px;">Done</a>
-        `;
-    } catch (err) {
-        alert('Failed to cancel: ' + err.message);
-    }
-}
-
 // ============== Initialize ==============
 window.addEventListener('hashchange', router);
 window.addEventListener('load', router);
 
-// Expose functions to window for onclick handlers
+// Global functions for onclick handlers
 window.logout = logout;
 window.copyBookingLink = copyBookingLink;
 window.cancelBooking = cancelBooking;
 window.connectGoogle = connectGoogle;
 window.disconnectGoogle = disconnectGoogle;
 window.upgradeToPro = upgradeToPro;
-window.upgradeToProPlus = upgradeToProPlus;
-window.manageBilling = manageBilling;
 window.selectDate = selectDate;
 window.selectSlot = selectSlot;
-window.confirmCancel = confirmCancel;
