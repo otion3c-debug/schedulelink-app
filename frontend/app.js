@@ -11,8 +11,8 @@
  * CRITICAL: Public routes NEVER check auth status
  */
 
-// API URL - dynamically determined based on current host
-const API_URL = window.location.origin;
+// API URL - always point to the Render backend API (Vercel is static-only)
+const API_URL = 'https://schedulelink-app.onrender.com';
 
 // ============== Subscription Tier Helpers ==============
 function getTierName(status) {
