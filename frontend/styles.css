@@ -764,6 +764,48 @@ a:hover {
     border-color: var(--accent, #f97316);
 }
 
+.calendar-day.has-bookings {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+    font-weight: 600;
+}
+
+.calendar-day.has-bookings:hover {
+    opacity: 0.85;
+}
+
+/* Bookings Calendar */
+.bookings-calendar-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+}
+
+.bookings-calendar-month {
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--text-primary);
+}
+
+.bookings-list-section {
+    margin-top: 1.5rem;
+}
+
+.bookings-list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+}
+
+.bookings-list-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
 /* Date Picker */
 .date-picker {
     display: grid;

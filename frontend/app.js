@@ -52,7 +52,10 @@ let state = {
     user: null,
     token: localStorage.getItem('schedulelink_token'),
     currentView: 'loading',
-    config: null
+    config: null,
+    selectedBookingsDate: null,
+    bookingsCalendarMonth: new Date().getMonth(),
+    bookingsCalendarYear: new Date().getFullYear()
 };
 
 // ============== API Client ==============
@@ -546,6 +549,19 @@ async function renderBookings() {
         console.error('Failed to load bookings:', e);
     }
     
+    const month = state.bookingsCalendarMonth;
+    const year = state.bookingsCalendarYear;
+    const selectedDate = state.selectedBookingsDate;
+    
+    const filteredBookings = selectedDate
+        ? bookings.filter(b => {
+            const d = new Date(b.start_time).toISOString().split('T')[0];
+            return d === selectedDate;
+        })
+        : bookings;
+    
+    const monthName = new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    
     return `
         <div class="dashboard">
             <div class="dashboard-header">
@@ -554,13 +570,112 @@ async function renderBookings() {
             </div>
             
             <div class="card">
-                ${bookings.length === 0 
-                    ? '<div class="empty-state"><p>No bookings yet. Share your booking link to get started!</p></div>'
-                    : bookings.map(b => renderBookingItemFull(b)).join('')
-                }
+                <div class="bookings-calendar-nav">
+                    <button class="btn btn-sm btn-secondary" onclick="prevBookingsMonth()">&#8249;</button>
+                    <span class="bookings-calendar-month">${monthName}</span>
+                    <button class="btn btn-sm btn-secondary" onclick="nextBookingsMonth()">&#8250;</button>
+                </div>
+                ${renderBookingsCalendar(bookings, month, year, selectedDate)}
+            </div>
+            
+            <div class="bookings-list-section">
+                <div class="bookings-list-header">
+                    <h3>${selectedDate ? formatDateLong(selectedDate) : 'All Bookings'}</h3>
+                    ${selectedDate ? '<button class="btn btn-sm btn-secondary" onclick="clearBookingsDate()">Show all</button>' : ''}
+                </div>
+                <div class="card">
+                    ${filteredBookings.length === 0 
+                        ? '<div class="empty-state"><p>No bookings' + (selectedDate ? ' on this date' : '') + '.</p></div>'
+                        : filteredBookings.map(b => renderBookingItemFull(b)).join('')
+                    }
+                </div>
             </div>
         </div>
     `;
+}
+
+function renderBookingsCalendar(bookings, month, year, selectedDate) {
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startOffset = firstDay.getDay();
+    const totalDays = lastDay.getDate();
+    
+    // Build a set of dates that have bookings
+    const datesWithBookings = new Set(
+        bookings.map(b => new Date(b.start_time).toISOString().split('T')[0])
+    );
+    
+    let html = `<div class="calendar-grid">`;
+    html += days.map(d => `<div class="calendar-header">${d}</div>`).join('');
+    
+    // Empty cells before first day
+    for (let i = 0; i < startOffset; i++) {
+        html += '<div class="calendar-day disabled"></div>';
+    }
+    
+    // Days of the month
+    for (let d = 1; d <= totalDays; d++) {
+        const date = new Date(year, month, d);
+        const dateStr = date.toISOString().split('T')[0];
+        const hasBookings = datesWithBookings.has(dateStr);
+        const isSelected = selectedDate === dateStr;
+        const isToday = new Date().toISOString().split('T')[0] === dateStr;
+        
+        let className = 'calendar-day';
+        if (isSelected) className += ' selected';
+        else if (hasBookings) className += ' has-bookings';
+        if (isToday) className += ' today';
+        if (!hasBookings) className += ' disabled';
+        
+        const onClick = hasBookings ? `onclick="selectBookingsDate('${dateStr}')"` : '';
+        html += `<div class="${className}" ${onClick}>${d}</div>`;
+    }
+    
+    // Fill remaining cells
+    const totalCells = startOffset + totalDays;
+    const remaining = (7 - (totalCells % 7)) % 7;
+    for (let i = 0; i < remaining; i++) {
+        html += '<div class="calendar-day disabled"></div>';
+    }
+    
+    html += '</div>';
+    return html;
+}
+
+function selectBookingsDate(dateStr) {
+    state.selectedBookingsDate = state.selectedBookingsDate === dateStr ? null : dateStr;
+    document.getElementById('app').innerHTML = renderLayout(renderBookings(), 'bookings');
+}
+
+function prevBookingsMonth() {
+    let m = state.bookingsCalendarMonth - 1;
+    let y = state.bookingsCalendarYear;
+    if (m < 0) { m = 11; y--; }
+    state.bookingsCalendarMonth = m;
+    state.bookingsCalendarYear = y;
+    state.selectedBookingsDate = null;
+    document.getElementById('app').innerHTML = renderLayout(renderBookings(), 'bookings');
+}
+
+function nextBookingsMonth() {
+    let m = state.bookingsCalendarMonth + 1;
+    let y = state.bookingsCalendarYear;
+    if (m > 11) { m = 0; y++; }
+    state.bookingsCalendarMonth = m;
+    state.bookingsCalendarYear = y;
+    state.selectedBookingsDate = null;
+    document.getElementById('app').innerHTML = renderLayout(renderBookings(), 'bookings');
+}
+
+function clearBookingsDate() {
+    state.selectedBookingsDate = null;
+    document.getElementById('app').innerHTML = renderLayout(renderBookings(), 'bookings');
+}
+
+function formatDateLong(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 }
 
 function renderBookingItemFull(booking) {
