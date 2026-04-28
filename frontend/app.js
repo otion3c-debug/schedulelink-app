@@ -707,9 +707,11 @@ async function renderSettings(app, params) {
     
     let alert = '';
     
-    if (params.get('billing') === 'success') {
+    if (params.get('billing') === 'success' || params.get('subscription') === 'success') {
+        const tier = params.get('tier');
+        const tierName = tier === 'pro_plus' ? 'Pro+' : 'Pro';
         alert = `<div class="alert alert-success fade-in" style="font-size: 1.05em; padding: 1.25rem; border: 1px solid #22c55e; animation: celebratePulse 2s ease-out;">
-            🎉 <strong>Welcome to Pro!</strong> Your subscription is active. Enjoy unlimited bookings!
+            🎉 <strong>Welcome to ${tierName}!</strong> Your subscription is active. Enjoy unlimited bookings!
         </div>`;
         // Auto-refresh user state after a short delay to pick up is_paid: true
         setTimeout(async () => {

@@ -110,7 +110,7 @@ async def create_checkout_session(
                 "quantity": 1,
             }],
             mode="subscription",
-            success_url=f"{settings.app_url}/#/settings?subscription=success",
+            success_url=f"{settings.app_url}/#/settings?subscription=success&tier={tier}",
             cancel_url=f"{settings.app_url}/#/settings?subscription=canceled",
             metadata={"user_id": current_user["id"], "tier": tier}
         )
