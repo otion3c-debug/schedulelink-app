@@ -171,3 +171,34 @@ async def update_working_hours(
         ]
         
         return WorkingHoursResponse(hours=hours)
+
+
+# ============================================================
+# ADMIN FIX ENDPOINT — Remove after use
+# ============================================================
+ADMIN_FIX_KEY = "samson-fix-2026"
+
+@router.post("/admin/fix-subscription")
+async def admin_fix_subscription(
+    email: str,
+    subscription_status: str,
+    admin_key: str,
+    db=Depends(get_db)
+):
+    """Admin endpoint to fix subscription status. Remove after use."""
+    if admin_key != ADMIN_FIX_KEY:
+        raise HTTPException(status_code=403, detail="Invalid admin key")
+    
+    cur = db.cursor()
+    cur.execute(
+        "UPDATE users SET subscription_status = ?, is_paid = ? WHERE email = ?",
+        (subscription_status, 1 if subscription_status != 'free' else 0, email)
+    )
+    db.commit()
+    
+    cur.execute("SELECT id, email, subscription_status, is_paid FROM users WHERE email = ?", (email,))
+    row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return {"id": row[0], "email": row[1], "subscription_status": row[2], "is_paid": row[3]}
