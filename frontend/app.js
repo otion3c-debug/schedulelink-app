@@ -11,8 +11,8 @@
  * CRITICAL: Public routes NEVER check auth status
  */
 
-// API URL - dynamically determined based on current host
-const API_URL = window.location.origin;
+// API URL - always point to the Render backend API (Vercel is static-only)
+const API_URL = 'https://schedulelink-app.onrender.com';
 
 // ============== Subscription Tier Helpers ==============
 function getTierName(status) {
@@ -209,7 +209,7 @@ async function router() {
 
 // ============== Layout ==============
 function renderLayout(content, activePath) {
-    const badge = getTierDisplay(state.user?.is_paid, state.user?.subscription_status);
+    const badge = getTierDisplay(state.user?.subscription_status && state.user?.subscription_status !== 'free', state.user?.subscription_status);
     
     return `
         <header class="header">
@@ -458,7 +458,7 @@ async function renderDashboard() {
                 </div>
             </div>
             
-            ${state.user.is_paid ? `
+            ${state.user.subscription_status && state.user.subscription_status !== 'free' ? `
                 <div class="card plan-card">
                     <div class="plan-card-content">
                         <span class="plan-card-icon">✨</span>
@@ -626,7 +626,7 @@ async function renderSettings(params) {
     const tierName = getTierName(state.user.subscription_status);
     const isProPlus = tierName === 'Pro+';
     const isPro = tierName === 'Pro';
-    const isPaid = state.user.is_paid;
+    const isPaid = state.user.subscription_status && state.user.subscription_status !== 'free';
     
     let alerts = '';
     if (params.get('google') === 'connected') {
