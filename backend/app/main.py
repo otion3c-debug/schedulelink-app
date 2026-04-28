@@ -72,13 +72,16 @@ async def debug_db():
     from .database import USE_POSTGRES, DATABASE_URL
     with get_db() as conn:
         user_count = conn.execute("SELECT COUNT(*) as c FROM users").fetchone()
+        users = conn.execute("SELECT id, username, email, full_name FROM users ORDER BY id").fetchall()
         from .database import dict_from_row
         user_count_dict = dict_from_row(user_count)
+        users_list = [dict_from_row(u) for u in users]
         return {
             "use_postgres": USE_POSTGRES,
             "db_url_set": bool(DATABASE_URL),
             "db_url_prefix": DATABASE_URL[:30] + "..." if DATABASE_URL else None,
             "user_count": user_count_dict['c'] if user_count_dict else 0,
+            "users": users_list,
         }
 
 
