@@ -243,6 +243,46 @@ def _init_sqlite():
         pass  # Column already exists
     
     conn.close()
+
+    # Seed demo user (Eric) if not exists
+    conn2 = sqlite3.connect(DATABASE_PATH)
+    conn2.row_factory = sqlite3.Row
+    existing = conn2.execute("SELECT id FROM users WHERE username = 'eric'").fetchone()
+    if not existing:
+        conn2.execute("""
+            INSERT INTO users (email, password_hash, full_name, username, timezone,
+                meeting_duration, buffer_time, is_paid, google_calendar_id,
+                created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        """, (
+            'eric@otion.solutions',
+            '$2b$12$hCBPQOlCFSUS4A0ZAqHqtOej7lVwGcGPAqGZ/bcOo7Ah4ziB0dJ.',
+            'Eric Hunt',
+            'eric',
+            'America/New_York',
+            30,
+            0,
+            0,
+            'primary',
+        ))
+        conn2.commit()
+
+        # Seed working hours Mon-Fri 9AM-5PM
+        for day in range(5):
+            conn2.execute(
+                "INSERT OR IGNORE INTO working_hours (user_id, day_of_week, enabled, start_time, end_time) VALUES (1, ?, 1, '09:00', '17:00')",
+                (day,)
+            )
+        # Sat-Sun disabled
+        for day in [5, 6]:
+            conn2.execute(
+                "INSERT OR IGNORE INTO working_hours (user_id, day_of_week, enabled, start_time, end_time) VALUES (1, ?, 0, '09:00', '17:00')",
+                (day,)
+            )
+        conn2.commit()
+        conn2.close()
+        print("[Database] Seeded demo user 'eric'")
+
     print("[Database] SQLite initialized successfully")
 
 
