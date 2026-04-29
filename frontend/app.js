@@ -986,10 +986,11 @@ async function upgradeToPro() {
 }
 
 async function upgradeToProPlus() {
-    // TODO: When Pro+ Stripe price is configured, point to Pro+ checkout
-    // For now, prompt that Pro+ is coming soon or use the same checkout
     try {
-        const data = await api('/api/billing/checkout');
+        const data = await api('/api/billing/checkout', {
+            method: 'POST',
+            body: JSON.stringify({ tier: 'pro_plus' })
+        });
         sessionStorage.setItem('just_upgraded', 'true');
         sessionStorage.setItem('upgraded_tier', 'Pro+');
         window.location.href = data.checkout_url;
