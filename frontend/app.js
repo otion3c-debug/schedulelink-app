@@ -975,7 +975,10 @@ async function disconnectGoogle() {
 
 async function upgradeToPro() {
     try {
-        const data = await api('/api/billing/checkout');
+        const data = await api('/api/stripe/checkout', {
+            method: 'POST',
+            body: JSON.stringify({ tier: 'pro' })
+        });
         // Set flag so dashboard shows welcome banner on return
         sessionStorage.setItem('just_upgraded', 'true');
         sessionStorage.setItem('upgraded_tier', 'Pro');
@@ -987,7 +990,7 @@ async function upgradeToPro() {
 
 async function upgradeToProPlus() {
     try {
-        const data = await api('/api/billing/checkout', {
+        const data = await api('/api/stripe/checkout', {
             method: 'POST',
             body: JSON.stringify({ tier: 'pro_plus' })
         });
@@ -1001,7 +1004,7 @@ async function upgradeToProPlus() {
 
 async function manageBilling() {
     try {
-        const data = await api('/api/billing/portal');
+        const data = await api('/api/stripe/portal', { method: 'POST' });
         window.location.href = data.portal_url;
     } catch (err) {
         alert('Failed to open billing portal: ' + err.message);
