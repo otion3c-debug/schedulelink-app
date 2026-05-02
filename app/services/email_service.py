@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 def _send(to_email: str, subject: str, html: str) -> bool:
+    logger.info(f"[email attempt] to={to_email} subject={subject!r} SMTP_USER={settings.SMTP_USER} SMTP_HOST={settings.SMTP_HOST}")
     if not settings.SMTP_PASSWORD:
         logger.info(f"[email skipped: no SMTP_PASSWORD] to={to_email} subject={subject!r}")
         return False
@@ -21,9 +22,10 @@ def _send(to_email: str, subject: str, html: str) -> bool:
             server.starttls()
             server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
             server.send_message(msg)
+        logger.info(f"[email sent successfully] to={to_email}")
         return True
     except Exception as e:
-        logger.error(f"Email send failed: {e}")
+        logger.error(f"Email send failed: {e} | SMTP_HOST={settings.SMTP_HOST} SMTP_USER={settings.SMTP_USER}")
         return False
 
 
