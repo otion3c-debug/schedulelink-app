@@ -87,10 +87,17 @@ async def google_callback(
 ):
     """Unified Google OAuth callback. State 'login' (or empty) signs in or signs up;
     state 'connect:<user_id>' attaches calendar credentials to that user."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     try:
+        logger.info(f"Google callback received, state={state}")
         token_data = await google_oauth.exchange_code_for_tokens(code)
+        logger.info("Token exchange successful")
         userinfo = await google_oauth.get_user_info(token_data["access_token"])
+        logger.info(f"Got userinfo for {userinfo.get('email')}")
     except Exception as e:
+        logger.error(f"OAuth exchange failed: {e}")
         raise HTTPException(400, f"OAuth exchange failed: {e}")
 
     email = userinfo.get("email")
@@ -136,22 +143,32 @@ async def google_callback(
         return RedirectResponse(f"{settings.FRONTEND_URL}/dashboard/settings?calendar_connected=1")
 
     # Login / signup flow
-    user = db.query(User).filter(User.email == email).first()
-    if not user:
-        full_name = userinfo.get("name") or email.split("@")[0]
-        user = User(
-            email=email,
-            full_name=full_name,
-            booking_slug=generate_unique_slug(db, full_name),
-            billing_cycle_start=date.today(),
-        )
-        db.add(user)
-        db.flush()
-        db.add(WidgetCustomization(user_id=user.id))
+    try:
+        user = db.query(User).filter(User.email == email).first()
+        if not user:
+            logger.info(f"Creating new user for {email}")
+            full_name = userinfo.get("name") or email.split("@")[0]
+            user = User(
+                email=email,
+                full_name=full_name,
+                booking_slug=generate_unique_slug(db, full_name),
+                billing_cycle_start=date.today(),
+            )
+            db.add(user)
+            db.flush()
+            db.add(WidgetCustomization(user_id=user.id))
+            db.commit()
+            db.refresh(user)
+            logger.info(f"User created with slug {user.booking_slug}")
+        else:
+            logger.info(f"Existing user found: {email}")
+        user.last_login = datetime.utcnow()
         db.commit()
-        db.refresh(user)
-    user.last_login = datetime.utcnow()
-    db.commit()
-    access = create_access_token(user.id)
-    refresh = create_refresh_token(user.id)
-    return RedirectResponse(f"{settings.FRONTEND_URL}/auth/callback?token={access}&refresh={refresh}")
+        access = create_access_token(user.id)
+        refresh = create_refresh_token(user.id)
+        logger.info(f"Redirecting to {settings.FRONTEND_URL}/auth/callback")
+        return RedirectResponse(f"{settings.FRONTEND_URL}/auth/callback?token={access}&refresh={refresh}")
+    except Exception as e:
+        logger.error(f"User creation/login failed: {e}")
+        db.rollback()
+        raise HTTPException(500, f"Login failed: {e}")
