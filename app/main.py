@@ -7,6 +7,8 @@ from sqlalchemy import text
 from .config import settings
 from .database import engine
 from .routers import auth, users, calendars, availability, bookings, public, widget, subscriptions
+from .database import Base
+from . import models  # noqa: F401 — ensure all models are imported
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("schedulelink")
@@ -54,6 +56,13 @@ def health():
         "database": "ok" if db_ok else "error",
         "timestamp": datetime.utcnow().isoformat(),
     }
+
+
+@app.on_event("startup")
+def on_startup():
+    logger.info("Creating database tables if they don't exist...")
+    Base.metadata.create_all(bind=engine)
+    logger.info("Database tables ready.")
 
 
 app.include_router(auth.router)
