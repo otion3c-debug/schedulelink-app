@@ -1,5 +1,5 @@
 from typing import Optional
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from ..database import get_db
@@ -42,11 +42,21 @@ def _serialize(w: WidgetCustomization, slug: str) -> dict:
     }
 
 
+def _require_pro_plus(user: User):
+    """Require Pro+ subscription for widget access."""
+    if user.subscription_tier != "pro_plus":
+        raise HTTPException(
+            status_code=403,
+            detail="Widget embed is a Pro+ feature. Please upgrade to access this feature."
+        )
+
+
 @router.get("/settings")
 def get_settings(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    _require_pro_plus(current_user)
     w = _get_or_create(db, current_user)
     return _serialize(w, current_user.booking_slug)
 
@@ -57,6 +67,7 @@ def update_settings(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    _require_pro_plus(current_user)
     w = _get_or_create(db, current_user)
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(w, field, value)
@@ -67,6 +78,7 @@ def update_settings(
 
 @router.get("/embed-code")
 def embed_code(current_user: User = Depends(get_current_user)):
+    _require_pro_plus(current_user)
     slug = current_user.booking_slug
     return {
         "embed_code": f'<script src="{settings.FRONTEND_URL}/widget.js" data-slug="{slug}"></script>',
