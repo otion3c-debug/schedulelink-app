@@ -7,7 +7,7 @@ from ..database import get_db
 from ..models import Booking, User, CalendarConnection, AvailabilityRule
 from ..schemas.booking import BookingCreate, BookingOut, BookingUpdate, BookingCancel
 from ..security import get_current_user
-from ..services import google_calendar, email_service
+from ..services import google_calendar, microsoft_calendar, email_service
 import uuid
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
@@ -123,6 +123,14 @@ async def create_booking(body: BookingCreate, db: Session = Depends(get_db)):
         except Exception as e:
             # Don't fail the booking if calendar push fails — log and continue.
             import logging; logging.getLogger(__name__).error(f"Calendar event create failed: {e}")
+    elif primary and primary.provider == "microsoft":
+        try:
+            event = await microsoft_calendar.create_event(primary, booking, db)
+            booking.calendar_event_id = event.get("id")
+            booking.calendar_provider = "microsoft"
+            calendar_event_created = True
+        except Exception as e:
+            import logging; logging.getLogger(__name__).error(f"Microsoft calendar event create failed: {e}")
 
     user.bookings_used_this_month = (user.bookings_used_this_month or 0) + 1
     db.commit()
@@ -197,14 +205,17 @@ async def cancel_booking(
     b.cancelled_at = datetime.utcnow()
     b.cancellation_reason = body.cancellation_reason
 
-    if b.calendar_event_id and b.calendar_provider == "google":
+    if b.calendar_event_id and b.calendar_provider in ("google", "microsoft"):
         primary = db.query(CalendarConnection).filter(
             CalendarConnection.user_id == current_user.id,
             CalendarConnection.is_primary == True,
         ).first()
         if primary:
             try:
-                await google_calendar.delete_event(primary, b.calendar_event_id, db)
+                if b.calendar_provider == "google":
+                    await google_calendar.delete_event(primary, b.calendar_event_id, db)
+                elif b.calendar_provider == "microsoft":
+                    await microsoft_calendar.delete_event(primary, b.calendar_event_id, db)
             except Exception:
                 pass
     db.commit()

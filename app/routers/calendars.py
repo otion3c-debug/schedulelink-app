@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import CalendarConnection, User
 from ..security import get_current_user
-from ..services import google_oauth
+from ..services import google_oauth, microsoft_oauth
 import uuid
 
 router = APIRouter(prefix="/calendars", tags=["calendars"])
@@ -34,6 +34,12 @@ def list_calendars(
 def connect_google(current_user: User = Depends(get_current_user)):
     state = f"connect:{current_user.id}"
     return {"authorization_url": google_oauth.build_calendar_connect_url(state=state)}
+
+
+@router.post("/connect/microsoft")
+def connect_microsoft(current_user: User = Depends(get_current_user)):
+    state = f"connect:{current_user.id}"
+    return {"authorization_url": microsoft_oauth.build_calendar_connect_url(state=state)}
 
 
 @router.post("/{calendar_id}/set-primary")
