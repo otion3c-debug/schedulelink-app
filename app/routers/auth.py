@@ -174,9 +174,9 @@ async def google_callback(
         raise HTTPException(500, f"Login failed: {e}")
 
 
-@router.get("/microsoft/url")
-def microsoft_login_url():
-    return {"authorization_url": microsoft_oauth.build_login_url(state="login")}
+@router.get("/microsoft/login")
+def microsoft_login():
+    return RedirectResponse(microsoft_oauth.build_login_url(state="login"))
 
 
 @router.get("/microsoft/callback")
