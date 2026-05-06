@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
-    GOOGLE_REDIRECT_URI: str = "http://localhost:8000/auth/google/callback"
+    GOOGLE_REDIRECT_URI: str = "https://schedulelink-app.onrender.com/auth/google/callback"
 
     MICROSOFT_CLIENT_ID: str = ""
     MICROSOFT_CLIENT_SECRET: str = ""
@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     EMAIL_FROM: str = "ScheduleLink <support@schedulelink.tech>"
 
     FRONTEND_URL: str = "http://localhost:3000"
-    BACKEND_URL: str = "http://localhost:8000"
+    BACKEND_URL: str = "https://schedulelink-app.onrender.com"
 
     @property
     def fernet(self) -> Fernet:
