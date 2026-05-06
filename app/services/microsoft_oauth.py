@@ -65,7 +65,6 @@ async def exchange_code_for_tokens(code: str, redirect_uri: Optional[str] = None
                 "client_secret": settings.MICROSOFT_CLIENT_SECRET,
                 "redirect_uri": redirect_uri or settings.MICROSOFT_REDIRECT_URI,
                 "grant_type": "authorization_code",
-                "scope": " ".join(CALENDAR_SCOPES),
             },
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
