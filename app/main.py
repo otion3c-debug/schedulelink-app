@@ -60,9 +60,13 @@ def health():
 
 @app.on_event("startup")
 def on_startup():
-    logger.info("Creating database tables if they don't exist...")
-    Base.metadata.create_all(bind=engine)
-    logger.info("Database tables ready.")
+    logger.info("Verifying database connection...")
+    try:
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database connection OK, tables verified.")
+    except Exception as e:
+        logger.warning(f"Could not verify database on startup: {e}")
+        logger.warning("App will start and attempt connections at runtime.")
 
 
 app.include_router(auth.router)
