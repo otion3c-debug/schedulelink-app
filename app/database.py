@@ -4,10 +4,14 @@ from .config import settings
 
 _is_sqlite = settings.DATABASE_URL.startswith("sqlite")
 
-connect_args = {"check_same_thread": False} if _is_sqlite else {}
+connect_args = {"check_same_thread": False} if _is_sqlite else {
+    "sslmode": "require",
+    "connect_timeout": 10,
+}
 pool_kwargs = {} if _is_sqlite else {
     "pool_pre_ping": True,
     "pool_recycle": 300,
+    "pool_size": 5,
 }
 
 engine = create_engine(settings.DATABASE_URL, connect_args=connect_args, future=True, **pool_kwargs)
