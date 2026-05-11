@@ -32,8 +32,19 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     EMAIL_FROM: str = "ScheduleLink <support@schedulelink.tech>"
 
-    FRONTEND_URL: str = "http://localhost:3000"
+    FRONTEND_URL: str = "https://www.schedulelink.tech"
     BACKEND_URL: str = "https://schedulelink-app.onrender.com"
+
+    @property
+    def CORS_ORIGINS(self) -> list[str]:
+        return [
+            self.FRONTEND_URL.rstrip("/"),
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:8000",
+            "https://schedulelink.tech",
+            "https://www.schedulelink.tech",
+        ]
 
     @property
     def fernet(self) -> Fernet:
