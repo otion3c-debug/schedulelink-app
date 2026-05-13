@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
+import urllib.parse
 from .config import settings
 from .database import engine
 from .routers import auth, users, calendars, availability, bookings, public, widget, subscriptions
@@ -45,21 +46,34 @@ def root():
 @app.get("/health")
 def health():
     db_ok = True
+    db_error = None
+    db_url_info = ""
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
     except Exception as e:
         db_ok = False
+        db_error = str(e)[:200]
+        db_url_info = settings.DATABASE_URL[:50] + "..." if settings.DATABASE_URL.startswith("postgresql") else "sqlite"
         logger.error(f"Health check db error: {e}")
     return {
         "status": "healthy" if db_ok else "degraded",
         "database": "ok" if db_ok else "error",
+        "db_type": db_url_info,
+        "error_hint": db_error,
         "timestamp": datetime.utcnow().isoformat(),
     }
 
 
 @app.on_event("startup")
 def on_startup():
+    # Log which database we're using (without exposing full credentials)
+    db_scheme = settings.DATABASE_URL.split("://")[0] if "://" in settings.DATABASE_URL else "unknown"
+    db_host = ""
+    if db_scheme == "postgresql":
+        parsed = urllib.parse.urlparse(settings.DATABASE_URL)
+        db_host = parsed.hostname or "unknown"
+    logger.info(f"Starting with database: {db_scheme} at {db_host}")
     logger.info("Verifying database connection...")
     try:
         Base.metadata.create_all(bind=engine)
