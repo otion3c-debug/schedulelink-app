@@ -1,6 +1,6 @@
 from datetime import datetime
 import logging
-from fastapi import FastAPI, Request, Depends, Header
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -8,9 +8,7 @@ import urllib.parse
 from .config import settings
 from .database import engine
 from .routers import auth, users, calendars, availability, bookings, public, widget, subscriptions
-from .database import Base, SessionLocal, get_db
-from .models import User
-from datetime import date
+from .database import Base
 from . import models  # noqa: F401 — ensure all models are imported
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -93,28 +91,3 @@ app.include_router(bookings.router)
 app.include_router(public.router)
 app.include_router(widget.router)
 app.include_router(subscriptions.router)
-
-
-@app.post("/admin/set-tier")
-def admin_set_tier(email: str = Header(...), tier: str = Header(...), admin_key: str = Header(...), db=Depends(get_db)):
-    if admin_key != "sl-admin-upgrade-2026":
-        return {"ok": False, "error": "Unauthorized"}
-    valid_tiers = {"free", "pro", "pro_plus"}
-    if tier not in valid_tiers:
-        return {"ok": False, "error": f"Invalid tier '{tier}'. Must be one of: {', '.join(valid_tiers)}"}
-    user = db.query(User).filter(User.email == email).first()
-    if not user:
-        return {"ok": False, "error": f"User with email '{email}' not found"}
-    user.subscription_tier = tier
-    user.subscription_status = "active"
-    user.booking_limit = 999999 if tier in ("pro", "pro_plus") else 5
-    if not user.billing_cycle_start:
-        user.billing_cycle_start = date.today()
-    db.commit()
-    return {
-        "ok": True,
-        "email": user.email,
-        "tier": user.subscription_tier,
-        "status": user.subscription_status,
-        "booking_limit": user.booking_limit,
-    }
