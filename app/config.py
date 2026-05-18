@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
 from cryptography.fernet import Fernet
 import base64
 import hashlib
@@ -15,6 +16,11 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = "https://schedulelink-app.onrender.com/auth/google/callback"
+
+    @field_validator("GOOGLE_REDIRECT_URI")
+    @classmethod
+    def strip_trailing_whitespace(cls, v: str) -> str:
+        return v.strip()
 
     MICROSOFT_CLIENT_ID: str = ""
     MICROSOFT_CLIENT_SECRET: str = ""
