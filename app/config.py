@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
-    GOOGLE_REDIRECT_URI: str = "https://schedulelink-app.onrender.com/auth/google/callback"
+    GOOGLE_REDIRECT_URI: str = "https://api.schedulelink.tech/auth/google/callback"
 
     @field_validator("GOOGLE_REDIRECT_URI")
     @classmethod
@@ -24,8 +24,8 @@ class Settings(BaseSettings):
 
     MICROSOFT_CLIENT_ID: str = ""
     MICROSOFT_CLIENT_SECRET: str = ""
-    MICROSOFT_TENANT_ID: str = "common"
-    MICROSOFT_REDIRECT_URI: str = "https://schedulelink-app.onrender.com/auth/microsoft/callback"
+    MICROSOFT_TENANT_ID: str = "consumers"
+    MICROSOFT_REDIRECT_URI: str = "https://api.schedulelink.tech/auth/microsoft/callback"
 
     STRIPE_SECRET_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
