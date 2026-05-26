@@ -1,5 +1,6 @@
 from datetime import datetime
 import logging
+from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -92,3 +93,13 @@ app.include_router(public.router)
 app.include_router(widget.router)
 app.include_router(subscriptions.router)
 app.include_router(vapi_webhook.router)
+
+
+@app.get("/demo-video")
+async def demo_video():
+    """Serve the OAuth demo video for Google verification."""
+    video_path = Path(__file__).parent / "static" / "schedulelink-demo.mp4"
+    if not video_path.exists():
+        return JSONResponse({"error": "Video not found"}, status_code=404)
+    from fastapi.responses import FileResponse
+    return FileResponse(video_path, media_type="video/mp4")
