@@ -33,9 +33,10 @@ class Settings(BaseSettings):
     STRIPE_PRO_PLUS_PRICE_ID: str = ""
 
     SMTP_HOST: str = "smtp.zoho.com"
-    SMTP_PORT: int = 587
+    SMTP_PORT: int = 465
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
+    SMTP_USE_SSL: bool = True
     EMAIL_FROM: str = "ScheduleLink <support@schedulelink.tech>"
 
     FRONTEND_URL: str = "https://www.schedulelink.tech"
