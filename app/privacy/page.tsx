@@ -52,6 +52,12 @@ export default function PrivacyPage() {
             Mobile information and messaging consent will not be shared with third parties
             or affiliates for marketing or promotional purposes.
           </p>
+          <p>
+            By providing your phone number and consenting to receive SMS messages, you agree to
+            receive automated booking confirmations, reminders, and service-related messages.
+            Consent is not a condition of purchase. Text STOP to cancel or HELP for help.
+            Message frequency varies. Message and data rates may apply.
+          </p>
 
           <h2 className="h2 mt-8">4. Data Sharing</h2>
           <p>
