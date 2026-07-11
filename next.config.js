@@ -4,5 +4,12 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_API_URL: "https://api.schedulelink.tech",
   },
+  experimental: {
+    turbo: {
+      resolveAlias: {
+        //
+      },
+    },
+  },
 };
 module.exports = nextConfig;
