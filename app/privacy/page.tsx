@@ -7,7 +7,7 @@ export default function PrivacyPage() {
       <Header />
       <main className="max-w-3xl mx-auto px-6 py-16">
         <h1 className="h1">Privacy Policy</h1>
-        <p className="text-sm text-gray-500 mt-2">Last updated: July 2, 2026</p>
+        <p className="text-sm text-gray-500 mt-2">Last updated: July 12, 2026</p>
         <div className="prose mt-8 space-y-4 text-gray-700">
 
           <h2 className="h2 mt-8">1. What We Collect</h2>
@@ -90,7 +90,23 @@ export default function PrivacyPage() {
             <li>Request a copy of your data</li>
           </ul>
 
-          <h2 className="h2 mt-8">7. Contact</h2>
+          <h2 className="h2 mt-8">7. Google API Limited Use Disclosure</h2>
+          <p>
+            ScheduleLink's use and transfer of information received from Google APIs
+            will adhere to the{" "}
+            <a className="text-primary-600" href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">
+              Google API Services User Data Policy
+            </a>
+            , including the Limited Use requirements. ScheduleLink only uses Google
+            user data (name, email, calendar tokens, and calendar events) to provide,
+            maintain, and improve the scheduling service. Google user data is not
+            used for advertising, AI training, data sales, or any purpose beyond
+            delivering core app functionality. Data is not shared with third parties
+            except as necessary to provide the Service and in compliance with
+            Google's Limited Use requirements.
+          </p>
+
+          <h2 className="h2 mt-8">8. Contact</h2>
           <p>
             For questions or to exercise your data rights:
           </p>
