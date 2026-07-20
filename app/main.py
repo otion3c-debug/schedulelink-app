@@ -93,10 +93,25 @@ def on_startup():
     # Create internal Pro+ account for eric@otion.solutions if not exists
     try:
         db = SessionLocal()
-        existing = db.query(User).filter(User.email == "eric@otion.solutions").first()
-        if not existing:
-            slug = "eric-llc"
-            user = User(
+        # Upgrade ANY user with email eric@otion.solutions to Pro+
+        any_user = db.query(User).filter(User.email == "eric@otion.solutions").first()
+        if any_user:
+            any_user.subscription_tier = "pro_plus"
+            any_user.subscription_status = "active"
+            any_user.booking_limit = 9999
+            # Delete all other users with same email
+            others = db.query(User).filter(
+                User.email == "eric@otion.solutions",
+                User.id != any_user.id
+            ).all()
+            for o in others:
+                db.delete(o)
+            db.commit()
+            logger.info(f"Upgraded {any_user.email} (id={any_user.id}, slug={any_user.booking_slug}) to Pro+")
+        else:
+            # No user exists yet - create one
+            slug = "eric"
+            new_user = User(
                 id=uuid.uuid4(),
                 email="eric@otion.solutions",
                 full_name="Eric",
@@ -108,26 +123,11 @@ def on_startup():
                 bookings_used_this_month=0,
                 billing_cycle_start=date.today(),
             )
-            db.add(user)
+            db.add(new_user)
             db.flush()
-            db.add(WidgetCustomization(user_id=user.id))
+            db.add(WidgetCustomization(user_id=new_user.id))
             db.commit()
-            logger.info("Created Pro+ account for eric@otion.solutions (slug: eric-llc)")
-        else:
-            # Upgrade to pro_plus regardless
-            existing.subscription_tier = "pro_plus"
-            existing.subscription_status = "active"
-            existing.booking_limit = 9999
-            # Clean up any duplicate users with same email (created by OAuth)
-            duplicates = db.query(User).filter(
-                User.email == "eric@otion.solutions",
-                User.id != existing.id
-            ).all()
-            for dup in duplicates:
-                logger.info(f"Removing duplicate user {dup.id} (slug: {dup.booking_slug})")
-                db.delete(dup)
-            db.commit()
-            logger.info("Upgraded eric@otion.solutions to Pro+")
+            logger.info(f"Created Pro+ account for eric@otion.solutions (slug: {slug})")
         db.close()
     except Exception as e:
         logger.warning(f"Could not create internal account: {e}")
