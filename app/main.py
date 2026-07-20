@@ -11,6 +11,13 @@ from .database import engine
 from .routers import auth, users, calendars, availability, bookings, public, widget, subscriptions, vapi_webhook
 from .database import Base
 from . import models  # noqa: F401 — ensure all models are imported
+from sqlalchemy.orm import Session
+from .database import SessionLocal
+from .models.user import User
+from .models import WidgetCustomization
+from .utils import generate_unique_slug
+import uuid
+from datetime import date
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("schedulelink")
@@ -82,6 +89,35 @@ def on_startup():
     except Exception as e:
         logger.warning(f"Could not verify database on startup: {e}")
         logger.warning("App will start and attempt connections at runtime.")
+
+    # Create internal Pro+ account for eric@otion.solutions if not exists
+    try:
+        db = SessionLocal()
+        existing = db.query(User).filter(User.email == "eric@otion.solutions").first()
+        if not existing:
+            slug = "eric-llc"
+            user = User(
+                id=uuid.uuid4(),
+                email="eric@otion.solutions",
+                full_name="Eric",
+                timezone="America/New_York",
+                subscription_tier="pro_plus",
+                subscription_status="active",
+                booking_slug=slug,
+                booking_limit=9999,
+                bookings_used_this_month=0,
+                billing_cycle_start=date.today(),
+            )
+            db.add(user)
+            db.flush()
+            db.add(WidgetCustomization(user_id=user.id))
+            db.commit()
+            logger.info("Created Pro+ account for eric@otion.solutions (slug: eric-llc)")
+        else:
+            logger.info("Pro+ account for eric@otion.solutions already exists")
+        db.close()
+    except Exception as e:
+        logger.warning(f"Could not create internal account: {e}")
 
 
 app.include_router(auth.router)
