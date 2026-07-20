@@ -164,6 +164,25 @@ def admin_upgrade_eric():
         return {"error": str(e)}
 
 
+@app.get("/admin/users")
+def admin_list_users():
+    """Temp: list all users count and eric's details."""
+    try:
+        db = SessionLocal()
+        total = db.query(User).count()
+        eric_users = db.query(User).filter(User.email == "eric@otion.solutions").all()
+        db.close()
+        return {
+            "total_users": total,
+            "eric_accounts": [
+                {"id": str(u.id), "slug": u.booking_slug, "tier": u.subscription_tier, "status": u.subscription_status}
+                for u in eric_users
+            ],
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @app.get("/demo-video")
 async def demo_video():
     """Serve the OAuth demo video for Google verification."""
