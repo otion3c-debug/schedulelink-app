@@ -154,12 +154,12 @@ def admin_upgrade_eric():
             db.close()
             return {"error": "User not found"}
         old_tier = user.subscription_tier
-        user.subscription_tier = "pro_plus"
-        user.subscription_status = "active"
-        user.booking_limit = 9999
+        db.execute(
+            text("UPDATE users SET subscription_tier='pro_plus', subscription_status='active', booking_limit=9999 WHERE email='eric@otion.solutions'")
+        )
         db.commit()
         db.close()
-        return {"email": "eric@otion.solutions", "old_tier": old_tier, "new_tier": "pro_plus", "slug": user.booking_slug}
+        return {"email": "eric@otion.solutions", "old_tier": old_tier, "new_tier": "pro_plus"}
     except Exception as e:
         return {"error": str(e)}
 
