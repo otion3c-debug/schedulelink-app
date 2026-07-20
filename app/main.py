@@ -114,15 +114,20 @@ def on_startup():
             db.commit()
             logger.info("Created Pro+ account for eric@otion.solutions (slug: eric-llc)")
         else:
-            # Ensure tier is pro_plus (in case user was created via OAuth as free)
-            if existing.subscription_tier != "pro_plus":
-                existing.subscription_tier = "pro_plus"
-                existing.subscription_status = "active"
-                existing.booking_limit = 9999
-                db.commit()
-                logger.info("Upgraded eric@otion.solutions to Pro+")
-            else:
-                logger.info("Pro+ account for eric@otion.solutions already exists")
+            # Upgrade to pro_plus regardless
+            existing.subscription_tier = "pro_plus"
+            existing.subscription_status = "active"
+            existing.booking_limit = 9999
+            # Clean up any duplicate users with same email (created by OAuth)
+            duplicates = db.query(User).filter(
+                User.email == "eric@otion.solutions",
+                User.id != existing.id
+            ).all()
+            for dup in duplicates:
+                logger.info(f"Removing duplicate user {dup.id} (slug: {dup.booking_slug})")
+                db.delete(dup)
+            db.commit()
+            logger.info("Upgraded eric@otion.solutions to Pro+")
         db.close()
     except Exception as e:
         logger.warning(f"Could not create internal account: {e}")
