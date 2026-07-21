@@ -164,6 +164,24 @@ def admin_upgrade_eric():
         return {"error": str(e)}
 
 
+@app.get("/admin/delete-eric")
+def admin_delete_eric():
+    """Delete eric@otion.solutions user so they can sign in fresh."""
+    try:
+        db = SessionLocal()
+        user = db.query(User).filter(User.email == "eric@otion.solutions").first()
+        if not user:
+            db.close()
+            return {"result": "No user found to delete"}
+        slug = user.booking_slug
+        db.delete(user)
+        db.commit()
+        db.close()
+        return {"result": "deleted", "slug": slug}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @app.get("/admin/users")
 def admin_list_users():
     """Temp: list all users count and eric's details."""
