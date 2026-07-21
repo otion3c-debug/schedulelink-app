@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     MICROSOFT_CLIENT_ID: str = ""
     MICROSOFT_CLIENT_SECRET: str = ""
     MICROSOFT_TENANT_ID: str = "consumers"
-    MICROSOFT_REDIRECT_URI: str = "https://api.schedulelink.tech/auth/microsoft/callback"
+    MICROSOFT_REDIRECT_URI: str = "https://schedulelink-api.onrender.com/auth/microsoft/callback"
 
     STRIPE_SECRET_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
