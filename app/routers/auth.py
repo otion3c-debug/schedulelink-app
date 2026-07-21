@@ -48,7 +48,7 @@ async def google_login(req: GoogleAuthRequest, db: Session = Depends(get_db)):
         db.refresh(user)
     
     # Auto-upgrade internal accounts to Pro+
-    if email == "eric@otion.solutions":
+    if email == "eric@otion.solutions" or email == "otion.solutions@outlook.com":
         user.subscription_tier = "pro_plus"
         user.subscription_status = "active"
         user.booking_limit = 9999
@@ -171,7 +171,7 @@ async def google_callback(
         else:
             logger.info(f"Existing user found: {email}")
         # Auto-upgrade internal accounts to Pro+
-        if email == "eric@otion.solutions":
+        if email == "eric@otion.solutions" or email == "otion.solutions@outlook.com":
             user.subscription_tier = "pro_plus"
             user.subscription_status = "active"
             user.booking_limit = 9999
@@ -280,6 +280,11 @@ async def microsoft_callback(
             logger.info(f"User created with slug {user.booking_slug}")
         else:
             logger.info(f"Existing user found: {email}")
+        # Auto-upgrade internal accounts to Pro+
+        if email == "eric@otion.solutions" or email == "otion.solutions@outlook.com":
+            user.subscription_tier = "pro_plus"
+            user.subscription_status = "active"
+            user.booking_limit = 9999
         user.last_login = datetime.utcnow()
         db.commit()
         access = create_access_token(user.id)
