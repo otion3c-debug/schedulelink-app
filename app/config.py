@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
-    GOOGLE_REDIRECT_URI: str = "https://api.schedulelink.tech/auth/google/callback"
+    GOOGLE_REDIRECT_URI: str = "https://schedulelink-api.onrender.com/auth/google/callback"
 
     @field_validator("GOOGLE_REDIRECT_URI")
     @classmethod
