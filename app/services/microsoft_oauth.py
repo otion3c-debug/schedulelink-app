@@ -4,6 +4,9 @@ from typing import Optional
 import httpx
 from urllib.parse import urlencode
 from ..config import settings
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _authority() -> str:
@@ -54,6 +57,13 @@ def build_calendar_connect_url(state: str) -> str:
     return f"{_auth_url()}?{urlencode(params)}"
 
 
+class _WrongTenant(Exception):
+    """Raised internally when Azure says the grant was for a different tenant."""
+    def __init__(self, msg: str, tried_tenant: str):
+        self.tried_tenant = tried_tenant
+        super().__init__(msg)
+
+
 async def exchange_code_for_tokens(code: str, redirect_uri: Optional[str] = None) -> dict:
     """Exchange authorization code for access + refresh tokens.
 
@@ -80,6 +90,10 @@ async def exchange_code_for_tokens(code: str, redirect_uri: Optional[str] = None
             if resp.is_success:
                 return resp.json()
             body = resp.json() if resp.text else {}
+            logger.warning(
+                "Microsoft OAuth token exchange failed for tenant '%s': %s",
+                tenant, body,
+            )
             # AADSTS7000012 = grant obtained for a different tenant -> fall back
             if resp.status_code == 400 and any(
                 "AADSTS7000012" in str(v) for v in body.values()
@@ -88,11 +102,6 @@ async def exchange_code_for_tokens(code: str, redirect_uri: Optional[str] = None
             resp.raise_for_status()
             return resp.json()  # unreachable, keep mypy happy
 
-    class _WrongTenant(Exception):
-        def __init__(self, msg: str, tried_tenant: str):
-            self.tried_tenant = tried_tenant
-            super().__init__(msg)
-
     configured_tenant = settings.MICROSOFT_TENANT_ID or "common"
     try:
         return await _try_exchange(configured_tenant)
@@ -100,6 +109,7 @@ async def exchange_code_for_tokens(code: str, redirect_uri: Optional[str] = None
         # The code was issued for a different tenant.  Personal Microsoft
         # accounts almost always need ``consumers``.
         fallback = "consumers" if exc.tried_tenant == "common" else "common"
+        logger.info("Microsoft OAuth: falling back to tenant '%s'", fallback)
         return await _try_exchange(fallback)
 
 
