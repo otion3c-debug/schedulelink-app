@@ -14,6 +14,19 @@ import uuid
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+@router.get("/microsoft/debug")
+def microsoft_debug():
+    from ..services.microsoft_oauth import _authority, _token_url
+    return {
+        "MICROSOFT_TENANT_ID": settings.MICROSOFT_TENANT_ID,
+        "_authority()": _authority(),
+        "_token_url()": _token_url(),
+        "redirect_uri": settings.MICROSOFT_REDIRECT_URI,
+        "client_id_prefix": settings.MICROSOFT_CLIENT_ID[:12] + "...",
+        "client_secret_set": bool(settings.MICROSOFT_CLIENT_SECRET),
+    }
+
+
 @router.get("/google/url")
 def google_login_url():
     return {"authorization_url": google_oauth.build_login_url(state="login")}
