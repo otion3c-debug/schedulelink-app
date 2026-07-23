@@ -99,8 +99,13 @@ async def exchange_code_for_tokens(code: str, redirect_uri: Optional[str] = None
                 "AADSTS7000012" in str(v) for v in body.values()
             ):
                 raise _WrongTenant("Grant obtained for a different tenant", tenant)
-            resp.raise_for_status()
-            return resp.json()  # unreachable, keep mypy happy
+            # Include Azure error details in the exception message
+            err_detail = body.get("error_description", str(body))
+            raise httpx.HTTPStatusError(
+                f"Azure tenant '{tenant}' returned {resp.status_code}: {err_detail}",
+                request=resp.request,
+                response=resp,
+            )
 
     configured_tenant = settings.MICROSOFT_TENANT_ID or "common"
     try:
