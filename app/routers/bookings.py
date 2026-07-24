@@ -146,7 +146,7 @@ async def create_booking(body: BookingCreate, bg_tasks: BackgroundTasks, db: Ses
         booking.id)
     bg_tasks.add_task(email_service.send_owner_notification,
         user.email,
-        user.display_name or user.email,
+        user.full_name or user.email,
         booking.attendee_name,
         booking.start_time,
         booking.timezone,

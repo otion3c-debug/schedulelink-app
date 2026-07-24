@@ -245,7 +245,7 @@ async def vapi_webhook(
     try:
         email_service.send_owner_notification(
             booking.user.email,
-            booking.user.display_name or booking.user.email,
+            booking.user.full_name or booking.user.email,
             booking.attendee_name,
             booking.start_time,
             booking.timezone,
