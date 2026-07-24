@@ -36,7 +36,28 @@ def _send(to_email: str, subject: str, html: str) -> bool:
         return False
 
 
+def send_owner_notification(booking, owner_email: str, owner_name: str) -> bool:
+    """Notify the calendar owner that someone booked a slot."""
+    when = booking.start_time.strftime("%A, %B %d, %Y at %I:%M %p")
+    html = f"""
+    <html><body>
+      <h2>New booking confirmed!</h2>
+      <p>Hi {owner_name},</p>
+      <p><strong>{booking.attendee_name}</strong> booked a time slot:</p>
+      <p><strong>{when} ({booking.timezone})</strong></p>
+      <p>Duration: {booking.duration_minutes} minutes</p>
+      <p>Email: {booking.attendee_email}</p>
+      {"<p>Phone: " + booking.attendee_phone + "</p>" if booking.attendee_phone else ""}
+      {"<p>Notes: " + booking.notes + "</p>" if booking.notes else ""}
+      <p><a href="{settings.FRONTEND_URL}/dashboard/bookings">View in dashboard</a></p>
+      <p>Thanks,<br>ScheduleLink</p>
+    </body></html>
+    """
+    return _send(owner_email, f"New booking from {booking.attendee_name} — {booking.start_time.strftime('%B %d at %I:%M %p')}", html)
+
+
 def send_booking_confirmation(booking) -> bool:
+    """Send confirmation to the person who booked the appointment."""
     when = booking.start_time.strftime("%A, %B %d, %Y at %I:%M %p")
     notes_html = f"<p>Notes: {booking.notes}</p>" if booking.notes else ""
     html = f"""

@@ -235,6 +235,10 @@ async def vapi_webhook(
             email_service.send_booking_confirmation(booking)
         except Exception as e:
             logger.warning(f"Vapi webhook: failed to send confirmation email: {e}")
+    try:
+        email_service.send_owner_notification(booking, booking.user.email, booking.user.display_name or booking.user.email)
+    except Exception as e:
+        logger.warning(f"Vapi webhook: failed to send owner notification: {e}")
 
     pretty_start = start_utc.strftime("%A, %B %d at %H:%M UTC")
     extra = " A calendar event was created." if calendar_event_created else ""

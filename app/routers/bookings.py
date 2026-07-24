@@ -137,12 +137,14 @@ async def create_booking(body: BookingCreate, db: Session = Depends(get_db)):
     db.refresh(booking)
 
     confirmation_sent = email_service.send_booking_confirmation(booking)
+    owner_notified = email_service.send_owner_notification(booking, user.email, user.display_name or user.email)
 
     return {
         "id": str(booking.id),
         "booking_url": f"/booking/{booking.id}",
         "calendar_event_created": calendar_event_created,
         "confirmation_email_sent": confirmation_sent,
+        "owner_notified": owner_notified,
     }
 
 
