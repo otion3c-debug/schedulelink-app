@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, date
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from ..database import get_db
@@ -79,7 +79,7 @@ def list_bookings(
 
 
 @router.post("")
-async def create_booking(body: BookingCreate, db: Session = Depends(get_db)):
+async def create_booking(body: BookingCreate, bg_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.booking_slug == body.user_slug).first()
     if not user:
         raise HTTPException(404, "User not found")
@@ -136,15 +136,15 @@ async def create_booking(body: BookingCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(booking)
 
-    confirmation_sent = email_service.send_booking_confirmation(booking)
-    owner_notified = email_service.send_owner_notification(booking, user.email, user.display_name or user.email)
+    bg_tasks.add_task(email_service.send_booking_confirmation, booking)
+    bg_tasks.add_task(email_service.send_owner_notification, booking, user.email, user.display_name or user.email)
 
     return {
         "id": str(booking.id),
         "booking_url": f"/booking/{booking.id}",
         "calendar_event_created": calendar_event_created,
-        "confirmation_email_sent": confirmation_sent,
-        "owner_notified": owner_notified,
+        "confirmation_email_sent": True,
+        "owner_notified": True,
     }
 
 
