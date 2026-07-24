@@ -139,6 +139,7 @@ async def create_booking(body: BookingCreate, bg_tasks: BackgroundTasks, db: Ses
     bg_tasks.add_task(email_service.send_booking_confirmation,
         booking.attendee_email,
         booking.attendee_name,
+        user.full_name or "your host",
         booking.start_time,
         booking.timezone,
         booking.duration_minutes,

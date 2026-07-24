@@ -235,6 +235,7 @@ async def vapi_webhook(
             email_service.send_booking_confirmation(
                 booking.attendee_email,
                 booking.attendee_name,
+                booking.user.full_name or "your host",
                 booking.start_time,
                 booking.timezone,
                 booking.duration_minutes,

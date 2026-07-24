@@ -77,6 +77,7 @@ def send_owner_notification(
 def send_booking_confirmation(
     attendee_email: str,
     attendee_name: str,
+    host_name: str,
     start_time: datetime,
     timezone: str,
     duration_minutes: int,
@@ -90,7 +91,7 @@ def send_booking_confirmation(
     <html><body>
       <h2>Your booking is confirmed!</h2>
       <p>Hi {attendee_name},</p>
-      <p>Your appointment has been scheduled for:</p>
+      <p>Your appointment with <strong>{host_name}</strong> has been scheduled for:</p>
       <p><strong>{when} ({timezone})</strong></p>
       <p>Duration: {duration_minutes} minutes</p>
       {notes_html}
