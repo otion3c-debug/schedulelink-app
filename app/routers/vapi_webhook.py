@@ -232,11 +232,27 @@ async def vapi_webhook(
 
     if attendee_email:
         try:
-            email_service.send_booking_confirmation(booking)
+            email_service.send_booking_confirmation(
+                booking.attendee_email,
+                booking.attendee_name,
+                booking.start_time,
+                booking.timezone,
+                booking.duration_minutes,
+                booking.notes,
+                booking.id)
         except Exception as e:
             logger.warning(f"Vapi webhook: failed to send confirmation email: {e}")
     try:
-        email_service.send_owner_notification(booking, booking.user.email, booking.user.display_name or booking.user.email)
+        email_service.send_owner_notification(
+            booking.user.email,
+            booking.user.display_name or booking.user.email,
+            booking.attendee_name,
+            booking.start_time,
+            booking.timezone,
+            booking.duration_minutes,
+            booking.attendee_email,
+            booking.attendee_phone,
+            booking.notes)
     except Exception as e:
         logger.warning(f"Vapi webhook: failed to send owner notification: {e}")
 

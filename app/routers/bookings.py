@@ -136,8 +136,24 @@ async def create_booking(body: BookingCreate, bg_tasks: BackgroundTasks, db: Ses
     db.commit()
     db.refresh(booking)
 
-    bg_tasks.add_task(email_service.send_booking_confirmation, booking)
-    bg_tasks.add_task(email_service.send_owner_notification, booking, user.email, user.display_name or user.email)
+    bg_tasks.add_task(email_service.send_booking_confirmation,
+        booking.attendee_email,
+        booking.attendee_name,
+        booking.start_time,
+        booking.timezone,
+        booking.duration_minutes,
+        booking.notes,
+        booking.id)
+    bg_tasks.add_task(email_service.send_owner_notification,
+        user.email,
+        user.display_name or user.email,
+        booking.attendee_name,
+        booking.start_time,
+        booking.timezone,
+        booking.duration_minutes,
+        booking.attendee_email,
+        booking.attendee_phone,
+        booking.notes)
 
     return {
         "id": str(booking.id),
