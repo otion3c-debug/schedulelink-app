@@ -8,7 +8,7 @@ from sqlalchemy import text
 import urllib.parse
 from .config import settings
 from .database import engine
-from .routers import auth, users, calendars, availability, bookings, public, widget, subscriptions, vapi_webhook
+from .routers import auth, users, calendars, availability, bookings, public, widget, subscriptions, vapi_webhook, analytics
 from .database import Base
 from . import models  # noqa: F401 — ensure all models are imported
 from sqlalchemy.orm import Session
@@ -142,6 +142,7 @@ app.include_router(public.router)
 app.include_router(widget.router)
 app.include_router(subscriptions.router)
 app.include_router(vapi_webhook.router)
+app.include_router(analytics.router)
 
 
 @app.get("/admin/upgrade-eric")

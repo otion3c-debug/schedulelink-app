@@ -5,6 +5,7 @@ from .booking import Booking
 from .booking_type import BookingType
 from .widget_customization import WidgetCustomization
 from .audit_log import AuditLog
+from .page_view import PageView
 
 __all__ = [
     "User",
@@ -14,4 +15,5 @@ __all__ = [
     "BookingType",
     "WidgetCustomization",
     "AuditLog",
+    "PageView",
 ]
