@@ -144,64 +144,6 @@ app.include_router(subscriptions.router)
 app.include_router(vapi_webhook.router)
 app.include_router(analytics.router)
 
-
-@app.get("/admin/upgrade-eric")
-def admin_upgrade_eric():
-    """Temp endpoint: upgrade eric@otion.solutions to Pro+."""
-    try:
-        db = SessionLocal()
-        user = db.query(User).filter(User.email == "eric@otion.solutions").first()
-        if not user:
-            db.close()
-            return {"error": "User not found"}
-        old_tier = user.subscription_tier
-        db.execute(
-            text("UPDATE users SET subscription_tier='pro_plus', subscription_status='active', booking_limit=9999 WHERE email='eric@otion.solutions'")
-        )
-        db.commit()
-        db.close()
-        return {"email": "eric@otion.solutions", "old_tier": old_tier, "new_tier": "pro_plus"}
-    except Exception as e:
-        return {"error": str(e)}
-
-
-@app.get("/admin/delete-eric")
-def admin_delete_eric():
-    """Delete eric@otion.solutions user so they can sign in fresh."""
-    try:
-        db = SessionLocal()
-        user = db.query(User).filter(User.email == "eric@otion.solutions").first()
-        if not user:
-            db.close()
-            return {"result": "No user found to delete"}
-        slug = user.booking_slug
-        db.delete(user)
-        db.commit()
-        db.close()
-        return {"result": "deleted", "slug": slug}
-    except Exception as e:
-        return {"error": str(e)}
-
-
-@app.get("/admin/users")
-def admin_list_users():
-    """Temp: list all users count and eric's details."""
-    try:
-        db = SessionLocal()
-        total = db.query(User).count()
-        eric_users = db.query(User).filter(User.email == "eric@otion.solutions").all()
-        db.close()
-        return {
-            "total_users": total,
-            "eric_accounts": [
-                {"id": str(u.id), "slug": u.booking_slug, "tier": u.subscription_tier, "status": u.subscription_status}
-                for u in eric_users
-            ],
-        }
-    except Exception as e:
-        return {"error": str(e)}
-
-
 @app.get("/demo-video")
 async def demo_video():
     """Serve the OAuth demo video for Google verification."""

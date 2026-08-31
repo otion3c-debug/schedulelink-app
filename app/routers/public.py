@@ -1,8 +1,12 @@
 from datetime import datetime, timedelta, date, time as dtime
+from typing import Optional
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import User, AvailabilityRule, Booking, CalendarConnection, WidgetCustomization
+from ..schemas.booking import BookingOut, BookingCancel
+from ..services import google_calendar, microsoft_calendar
 
 router = APIRouter(prefix="/public", tags=["public"])
 
@@ -93,3 +97,75 @@ async def public_availability(
         },
         "available_slots": slots,
     }
+
+
+@router.get("/bookings/{booking_id}")
+def public_booking(booking_id: str, db: Session = Depends(get_db)):
+    """Attendee-safe public booking lookup for the confirmation page.
+
+    No auth required. Returns only the fields an attendee already knows
+    (they provided them at booking time). Cancellation is NOT offered
+    here by design: the cancel link lives only in the confirmation email
+    (possession of the inbox = proof of identity).
+    """
+    try:
+        b = db.query(Booking).filter(
+            Booking.id == uuid.UUID(booking_id),
+        ).first()
+    except ValueError:
+        raise HTTPException(404, "Booking not found")
+    if not b:
+        raise HTTPException(404, "Booking not found")
+    return BookingOut.model_validate(b).model_dump(mode="json")
+
+
+@router.post("/bookings/{booking_id}/cancel")
+async def public_cancel_booking(
+    booking_id: str,
+    body: BookingCancel = BookingCancel(),
+    db: Session = Depends(get_db),
+):
+    """Attendee cancellation, reachable only via the confirmation-email link.
+
+    The cancel URL ({FRONTEND_URL}/booking/{id}/cancel) is a
+    non-enumerable UUID delivered solely in the attendee confirmation
+    email, so possession of it is the proof of identity (option (a) in the
+    P2 security round). The public confirmation page deliberately does NOT
+    expose a cancel action; only the email link reaches this path.
+    """
+    try:
+        b = db.query(Booking).filter(
+            Booking.id == uuid.UUID(booking_id),
+        ).first()
+    except ValueError:
+        raise HTTPException(404, "Booking not found")
+    if not b:
+        raise HTTPException(404, "Booking not found")
+    if b.status != "confirmed":
+        raise HTTPException(409, "Booking is not cancellable")
+
+    b.status = "cancelled"
+    b.cancelled_at = datetime.utcnow()
+    b.cancellation_reason = body.cancellation_reason
+
+    if b.calendar_event_id and b.calendar_provider in ("google", "microsoft"):
+        # Mirror the owner-route cleanup: best-effort calendar event removal.
+        owner = db.query(User).filter(User.id == b.user_id).first()
+        primary = None
+        if owner:
+            primary = db.query(CalendarConnection).filter(
+                CalendarConnection.user_id == owner.id,
+                CalendarConnection.is_primary == True,
+            ).first()
+        if primary:
+            try:
+                if b.calendar_provider == "google":
+                    await google_calendar.delete_event(primary, b.calendar_event_id, db)
+                elif b.calendar_provider == "microsoft":
+                    await microsoft_calendar.delete_event(primary, b.calendar_event_id, db)
+            except Exception:
+                # best-effort: booking is still marked cancelled even if the
+                # external calendar cleanup fails
+                pass
+    db.commit()
+    return {"success": True, "status": "cancelled"}
