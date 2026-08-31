@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta
 from typing import Optional
 from uuid import UUID
-from pydantic import BaseModel, EmailStr, ConfigDict, field_validator
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from pydantic import BaseModel, EmailStr, ConfigDict, field_validator, model_validator
 
 
 class BookingCreate(BaseModel):
@@ -65,3 +66,27 @@ class BookingOut(BaseModel):
     status: str
     notes: Optional[str] = None
     created_at: datetime
+
+    # Canonical UTC instants. Derived from the stored naive local time + timezone so
+    # server components / any client can render correct absolute time regardless of host tz.
+    start_time_utc: Optional[datetime] = None
+    end_time_utc: Optional[datetime] = None
+
+    @model_validator(mode="after")
+    def _attach_utc(self):
+        try:
+            tz = ZoneInfo(self.timezone)
+        except (ZoneInfoNotFoundError, Exception):
+            tz = None
+        if tz is not None:
+            local = self.start_time if self.start_time.tzinfo is None else self.start_time.replace(tzinfo=None)
+            self.start_time_utc = local.replace(tzinfo=tz).astimezone(ZoneInfo("UTC"))
+            if self.end_time is not None:
+                end_local = self.end_time if self.end_time.tzinfo is None else self.end_time.replace(tzinfo=None)
+                self.end_time_utc = end_local.replace(tzinfo=tz).astimezone(ZoneInfo("UTC"))
+        elif self.start_time.tzinfo is not None:
+            # Already offset-aware (e.g. aware datetime stored): normalize to UTC directly.
+            self.start_time_utc = self.start_time.astimezone(ZoneInfo("UTC"))
+            if self.end_time is not None:
+                self.end_time_utc = self.end_time.astimezone(ZoneInfo("UTC"))
+        return self
