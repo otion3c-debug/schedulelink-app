@@ -18,6 +18,7 @@ router = APIRouter(prefix="/api/vapi", tags=["vapi"])
 
 ALLOWED_DURATIONS = {15, 30, 45, 60, 90, 120}
 MAX_FUTURE_DAYS = 90
+MIN_LEAD_MINUTES = 60  # appointments need at least this much notice
 NO_EMAIL_PLACEHOLDER = "no-email@vapi.local"
 
 
@@ -188,7 +189,8 @@ async def vapi_webhook(
     if start_dt is None:
         return _vapi_result(
             tool_call_id,
-            "I couldn't understand the start time. Please provide an ISO 8601 datetime (e.g. 2026-06-01T14:00:00-04:00).",
+            "I don't have a day and time to book yet. Ask the caller which day and time they want, "
+            "then call me again with the start time.",
         )
 
     start_utc = _to_naive_utc(start_dt)
@@ -255,6 +257,19 @@ async def vapi_webhook(
         host_zone = ZoneInfo(host_tz_name)
     except Exception:
         host_zone = timezone.utc
+    if start_utc < now_utc + timedelta(minutes=MIN_LEAD_MINUTES):
+        earliest_local = (now_utc + timedelta(minutes=MIN_LEAD_MINUTES)).replace(
+            tzinfo=timezone.utc).astimezone(host_zone)
+        logger.info(
+            f"Vapi webhook: {start_utc} UTC is inside the {MIN_LEAD_MINUTES}-minute notice window"
+        )
+        return _vapi_result(
+            tool_call_id,
+            f"That time is too soon — appointments need at least {MIN_LEAD_MINUTES} minutes' notice. "
+            f"The earliest bookable time is {earliest_local.strftime('%A, %B')} {earliest_local.day} at "
+            f"{_fmt_time(earliest_local)} ({host_tz_name}). Offer the caller a time at or after that.",
+        )
+
     by_day = _availability_by_day(db, user)
     local_start = start_utc.replace(tzinfo=timezone.utc).astimezone(host_zone).replace(tzinfo=None)
     local_end = end_utc.replace(tzinfo=timezone.utc).astimezone(host_zone).replace(tzinfo=None)

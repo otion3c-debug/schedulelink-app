@@ -24,7 +24,7 @@ logger = logging.getLogger("schedulelink")
 
 app = FastAPI(
     title="ScheduleLink API",
-    version="2.0.3",
+    version="2.0.4",
     description="Multi-calendar scheduling platform — backend API",
 )
 
@@ -48,7 +48,7 @@ async def log_requests(request: Request, call_next):
 
 @app.get("/")
 def root():
-    return {"name": "ScheduleLink API", "version": "2.0.3", "status": "ok"}
+    return {"name": "ScheduleLink API", "version": "2.0.4", "status": "ok"}
 
 
 @app.get("/health")
