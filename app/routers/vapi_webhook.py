@@ -2,13 +2,14 @@ from datetime import datetime, timedelta, timezone, date
 import json
 import logging
 from typing import Any, Optional
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Header, Request
 from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..database import get_db
-from ..models import Booking, CalendarConnection, User
+from ..models import AvailabilityRule, Booking, CalendarConnection, User
 from ..services import email_service, google_calendar, microsoft_calendar
 
 logger = logging.getLogger(__name__)
@@ -88,6 +89,51 @@ def _has_db_conflict(db: Session, user_id, start: datetime, end: datetime) -> bo
     ).first() is not None
 
 
+DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+
+def _fmt_time(value) -> str:
+    """12-hour clock without locale/platform-specific format codes (%-I is not portable)."""
+    hour = value.hour % 12 or 12
+    return f"{hour}:{value.minute:02d} {'AM' if value.hour < 12 else 'PM'}"
+
+
+def _availability_by_day(db: Session, user: User) -> dict:
+    """Active availability windows keyed by weekday (0=Monday), matching the schema."""
+    by_day: dict = {}
+    for r in db.query(AvailabilityRule).filter(
+        AvailabilityRule.user_id == user.id,
+        AvailabilityRule.is_active == True,
+    ).all():
+        by_day.setdefault(r.day_of_week, []).append((r.start_time, r.end_time))
+    return by_day
+
+
+def _describe_availability(by_day: dict, tz_name: str) -> str:
+    if not by_day:
+        return "no bookable hours are configured"
+    parts = []
+    for day in sorted(by_day):
+        windows = ", ".join(f"{_fmt_time(s)}-{_fmt_time(e)}" for s, e in sorted(by_day[day]))
+        label = DAY_NAMES[day] if 0 <= day < 7 else str(day)
+        parts.append(f"{label} {windows}")
+    return "; ".join(parts) + f" ({tz_name})"
+
+
+def _slot_within_availability(by_day: dict, local_start: datetime, local_end: datetime) -> bool:
+    """True when [local_start, local_end) fits entirely inside one window, same day.
+
+    Mirrors the loop in /public/availability: windows are naive local wall-clock
+    times in the host's own timezone, weekday 0=Monday.
+    """
+    if local_end.date() != local_start.date():
+        return False
+    for win_start, win_end in by_day.get(local_start.weekday(), []):
+        if win_start <= local_start.time() and local_end.time() <= win_end:
+            return True
+    return False
+
+
 def _refresh_quota(user: User) -> None:
     today = date.today()
     if user.billing_cycle_start is None:
@@ -155,6 +201,8 @@ async def vapi_webhook(
             f"Duration must be one of {sorted(ALLOWED_DURATIONS)} minutes.",
         )
 
+    end_utc = start_utc + timedelta(minutes=duration)
+
     attendee_email = _clean_str(params.get("attendee_email"), max_len=255)
     attendee_phone = _clean_str(params.get("attendee_phone"), max_len=50)
     tz = _clean_str(params.get("timezone"), max_len=50) or "UTC"
@@ -188,6 +236,30 @@ async def vapi_webhook(
             )
             return _vapi_result(tool_call_id, "Sorry, the booking host isn't configured yet — please try again later.")
 
+    # Enforce the host's real availability windows. Vapi only knows the hours we
+    # describe in prose, so without this the phone agent books weekends and the
+    # middle of the night while the public booking page would refuse them.
+    host_tz_name = user.timezone or "UTC"
+    try:
+        host_zone = ZoneInfo(host_tz_name)
+    except Exception:
+        host_zone = timezone.utc
+    by_day = _availability_by_day(db, user)
+    local_start = start_utc.replace(tzinfo=timezone.utc).astimezone(host_zone).replace(tzinfo=None)
+    local_end = end_utc.replace(tzinfo=timezone.utc).astimezone(host_zone).replace(tzinfo=None)
+    if not _slot_within_availability(by_day, local_start, local_end):
+        windows = _describe_availability(by_day, host_tz_name)
+        logger.info(
+            f"Vapi webhook: {start_utc} UTC is outside host availability for user "
+            f"{user.id} — windows: {windows}"
+        )
+        return _vapi_result(
+            tool_call_id,
+            f"That time is outside the host's booking hours. The host books: {windows}. "
+            f"Apologize briefly, read those windows to the caller, and offer one of them. "
+            f"Do not offer or book anything outside those windows.",
+        )
+
     _refresh_quota(user)
     if _quota_exceeded(user):
         logger.info(f"Vapi webhook: quota exceeded for user {user.id}")
@@ -196,7 +268,6 @@ async def vapi_webhook(
             "Sorry, the booking calendar has reached its monthly limit. Please try again next month.",
         )
 
-    end_utc = start_utc + timedelta(minutes=duration)
     if _has_db_conflict(db, user.id, start_utc, end_utc):
         return _vapi_result(tool_call_id, "That time slot is already booked. Could you try another time?")
 
@@ -276,8 +347,16 @@ async def vapi_webhook(
     except Exception as e:
         logger.warning(f"Vapi webhook: failed to send owner notification: {e}")
 
-    pretty_start = start_utc.strftime("%A, %B %d at %H:%M UTC")
+    local = start_utc.replace(tzinfo=timezone.utc).astimezone(host_zone)
+    day_phrase = f"{local.strftime('%A, %B')} {local.day}"
+    time_phrase = _fmt_time(local)
     extra = " A calendar event was created." if calendar_event_created else ""
-    text = f"Booked a {duration}-minute meeting for {attendee_name} on {pretty_start}.{extra}"
+    text = (
+        f"Booked a {duration}-minute meeting for {attendee_name} on "
+        f"{day_phrase} at {time_phrase} ({host_tz_name}).{extra} "
+        f'Confirm it to the caller by saying exactly: "You are all set for '
+        f'{day_phrase} at {time_phrase}." '
+        f"Never state a date, day of the week, or time that is not in this message."
+    )
     logger.info(f"Vapi webhook: created booking {booking.id} for user {user.id}")
     return _vapi_result(tool_call_id, text)
