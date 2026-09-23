@@ -21,8 +21,19 @@ MAX_FUTURE_DAYS = 90
 NO_EMAIL_PLACEHOLDER = "no-email@vapi.local"
 
 
+# Every tool result is written in English, but the call may be in Spanish. This
+# reminder rides on every result, so the agent sees it exactly when a bilingual call
+# is most likely to drift back into English.
+LANGUAGE_NOTE = (
+    " [Internal note — never read this part aloud: reply to the caller in the language "
+    "of the call. If this call is in Spanish, translate the message above and say it in "
+    "Spanish. Never answer a Spanish call in English, and never let this English text "
+    "pull you back into English.]"
+)
+
+
 def _vapi_result(tool_call_id: str, text: str) -> dict:
-    return {"results": [{"toolCallId": tool_call_id, "result": text}]}
+    return {"results": [{"toolCallId": tool_call_id, "result": text + LANGUAGE_NOTE}]}
 
 
 def _extract_call(payload: Optional[dict]) -> tuple[str, dict]:
@@ -348,15 +359,16 @@ async def vapi_webhook(
         logger.warning(f"Vapi webhook: failed to send owner notification: {e}")
 
     local = start_utc.replace(tzinfo=timezone.utc).astimezone(host_zone)
-    day_phrase = f"{local.strftime('%A, %B')} {local.day}"
     time_phrase = _fmt_time(local)
     extra = " A calendar event was created." if calendar_event_created else ""
     text = (
-        f"Booked a {duration}-minute meeting for {attendee_name} on "
-        f"{day_phrase} at {time_phrase} ({host_tz_name}).{extra} "
-        f'Confirm it to the caller by saying exactly: "You are all set for '
-        f'{day_phrase} at {time_phrase}." '
-        f"Never state a date, day of the week, or time that is not in this message."
+        f"BOOKED — the appointment is confirmed. Attendee: {attendee_name}. "
+        f"Day of the week: {local.strftime('%A')}. "
+        f"Date: {local.strftime('%B')} {local.day}, {local.year}. "
+        f"Time: {time_phrase}. Time zone: {host_tz_name}. "
+        f"Length: {duration} minutes.{extra} "
+        f"Tell the caller it is confirmed, using exactly that day of the week, date "
+        f"and time. Never state a day, a date or a time that is not in this message."
     )
     logger.info(f"Vapi webhook: created booking {booking.id} for user {user.id}")
     return _vapi_result(tool_call_id, text)
