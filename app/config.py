@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     BACKEND_URL: str = "https://schedulelink-app.onrender.com"
 
     VAPI_WEBHOOK_SECRET: str = ""
-    VAPI_BOOKING_SLUG: str = "eric-hunt"
+    VAPI_BOOKING_SLUG: str = "eric"
 
     @property
     def CORS_ORIGINS(self) -> list[str]:

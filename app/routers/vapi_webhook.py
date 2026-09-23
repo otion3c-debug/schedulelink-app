@@ -163,11 +163,30 @@ async def vapi_webhook(
     if service_type:
         notes = f"Service: {service_type}\n{notes}" if notes else f"Service: {service_type}"
 
-    booking_slug = settings.VAPI_BOOKING_SLUG or "eric-hunt"
+    booking_slug = settings.VAPI_BOOKING_SLUG or "eric"
     user = db.query(User).filter(User.booking_slug == booking_slug).first()
     if not user:
-        logger.error(f"Vapi webhook: configured booking slug '{booking_slug}' not found")
-        return _vapi_result(tool_call_id, "Sorry, the booking host isn't configured yet — please try again later.")
+        # Self-hosted Vapi deployments often leave VAPI_BOOKING_SLUG pointing at a slug
+        # that has since been renamed (or was guessed at authoring time). If this
+        # deployment holds exactly one account, that account is unambiguously the host.
+        # With more than one account the slug must be correct — refuse rather than
+        # risk booking onto the wrong person's calendar.
+        candidates = db.query(User).order_by(User.created_at.asc()).limit(2).all()
+        if len(candidates) == 1:
+            user = candidates[0]
+            logger.warning(
+                f"Vapi webhook: configured booking slug '{booking_slug}' not found — "
+                f"falling back to the only account on this deployment ('{user.booking_slug}'). "
+                f"Set VAPI_BOOKING_SLUG to fix."
+            )
+        else:
+            known = [u.booking_slug for u in db.query(User).limit(10).all()]
+            logger.error(
+                f"Vapi webhook: configured booking slug '{booking_slug}' not found and "
+                f"this deployment has {len(candidates)}+ accounts — cannot infer the host. "
+                f"Known slugs: {known}"
+            )
+            return _vapi_result(tool_call_id, "Sorry, the booking host isn't configured yet — please try again later.")
 
     _refresh_quota(user)
     if _quota_exceeded(user):
