@@ -40,6 +40,17 @@ else:
         "max_overflow": 10,
     }
 
+    # Name the DBAPI explicitly instead of letting SQLAlchemy infer it.
+    # SQLAlchemy 2.1 changed the default driver for a bare "postgresql://" URL
+    # from psycopg2 to psycopg (v3). This app installs psycopg2-binary only, so
+    # that default flip crash-looped the service at startup with
+    # "ModuleNotFoundError: No module named 'psycopg'". An explicit "+psycopg2"
+    # makes the URL immune to this class of silent library-default change.
+    for bare in ("postgresql://", "postgres://"):
+        if database_url.startswith(bare):
+            database_url = "postgresql+psycopg2://" + database_url[len(bare):]
+            break
+
 engine = create_engine(
     database_url,
     connect_args=connect_args,
