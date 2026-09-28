@@ -33,12 +33,11 @@ class BookingCreate(BaseModel):
     @field_validator("start_time")
     @classmethod
     def _check_start(cls, v):
-        # Compare naively in UTC; clients send local-aware ISO strings, but pydantic returns datetime as-is.
-        now = datetime.utcnow()
-        cmp_v = v.replace(tzinfo=None) if v.tzinfo else v
-        if cmp_v < now - timedelta(minutes=5):
-            raise ValueError("Cannot book in the past")
-        if cmp_v > now + timedelta(days=90):
+        # Loose sanity bound only. The precise "is this in the past?" test needs
+        # the HOST's timezone, which is not known at parse time, so it runs in
+        # create_booking against host-local now. Any offset here is < 1 day and
+        # irrelevant to a 90-day ceiling.
+        if v > datetime.utcnow() + timedelta(days=90):
             raise ValueError("Cannot book more than 90 days in advance")
         return v
 

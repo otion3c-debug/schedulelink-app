@@ -86,8 +86,18 @@ async def create_booking(body: BookingCreate, bg_tasks: BackgroundTasks, db: Ses
 
     _ensure_quota(user)
 
+    # Booking wall-clock time is ALWAYS the HOST's local time. The client posts a
+    # naive host-local slot string copied from /public/availability; any offset is
+    # stripped so a mislabelled payload cannot shift the appointment.
     start_naive = body.start_time.replace(tzinfo=None) if body.start_time.tzinfo else body.start_time
     end_naive = start_naive + timedelta(minutes=body.duration_minutes)
+
+    # "Is this in the past?" must be judged in the HOST's timezone. start_naive is
+    # host-local wall clock, so comparing it to utcnow() rejected every slot inside
+    # the current UTC offset — the next four hours of the day for America/New_York.
+    host_now = datetime.now(busy_times.host_zone(user.timezone)).replace(tzinfo=None)
+    if start_naive < host_now - timedelta(minutes=5):
+        raise HTTPException(400, "That time has already passed")
 
     if _check_db_conflict(db, user.id, start_naive, end_naive):
         raise HTTPException(409, "Time slot already booked")
@@ -112,7 +122,12 @@ async def create_booking(body: BookingCreate, bg_tasks: BackgroundTasks, db: Ses
         start_time=start_naive,
         end_time=end_naive,
         duration_minutes=body.duration_minutes,
-        timezone=body.timezone,
+        # Canonical: a booking has exactly ONE timezone — the host's. Never trust
+        # the client's zone. A guest booking from another timezone used to stamp
+        # the browser's zone onto a host-local wall time, which shifted the
+        # appointment, the Google Calendar event and the confirmation email by
+        # whatever the offset between the two zones happened to be.
+        timezone=user.timezone,
         notes=body.notes,
         status="confirmed",
     )
