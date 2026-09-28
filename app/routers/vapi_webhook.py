@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..database import get_db
 from ..models import AvailabilityRule, Booking, CalendarConnection, User
-from ..services import email_service, google_calendar, microsoft_calendar
+from ..services import email_service, google_calendar, microsoft_calendar, busy_times
 
 logger = logging.getLogger(__name__)
 
@@ -257,6 +257,9 @@ async def vapi_webhook(
         host_zone = ZoneInfo(host_tz_name)
     except Exception:
         host_zone = timezone.utc
+    # The zone actually in force (UTC if the stored name was invalid), so a row's
+    # timezone label always matches the basis its times were computed in.
+    host_tz_key = getattr(host_zone, "key", None) or "UTC"
     if start_utc < now_utc + timedelta(minutes=MIN_LEAD_MINUTES):
         earliest_local = (now_utc + timedelta(minutes=MIN_LEAD_MINUTES)).replace(
             tzinfo=timezone.utc).astimezone(host_zone)
@@ -294,18 +297,39 @@ async def vapi_webhook(
             "Sorry, the booking calendar has reached its monthly limit. Please try again next month.",
         )
 
-    if _has_db_conflict(db, user.id, start_utc, end_utc):
+    # Compare in the SAME basis the row is stored in — host-local. Until
+    # 2026-09-28 this passed start_utc/end_utc, which only ever matched the
+    # UTC-perfect rows this endpoint itself wrote.
+    if _has_db_conflict(db, user.id, local_start, local_end):
         return _vapi_result(tool_call_id, "That time slot is already booked. Could you try another time?")
+
+    # Also refuse anything that collides with an appointment already on the
+    # host's real calendar — the same check the public booking page performs.
+    if busy_times.overlaps(
+        local_start,
+        local_end,
+        await busy_times.external_busy_periods(db, user, local_start, local_end),
+    ):
+        return _vapi_result(
+            tool_call_id,
+            "That time is already taken on the host's calendar. Apologize briefly and "
+            "offer the caller a different time.",
+        )
 
     booking = Booking(
         user_id=user.id,
         attendee_name=attendee_name,
         attendee_email=attendee_email or NO_EMAIL_PLACEHOLDER,
         attendee_phone=attendee_phone,
-        start_time=start_utc,
-        end_time=end_utc,
+        # Stored in the host's naive LOCAL wall-clock time, matching the website
+        # booking path and the availability rules. This endpoint used to store
+        # UTC here while labelling the row with the caller's timezone, so the
+        # row was incoherent: the public page compared it against local slots
+        # (blocking the wrong hour) and BookingOut derived a shifted UTC instant.
+        start_time=local_start,
+        end_time=local_end,
         duration_minutes=duration,
-        timezone=tz,
+        timezone=host_tz_key,
         notes=notes,
         status="confirmed",
     )
