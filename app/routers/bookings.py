@@ -7,7 +7,7 @@ from ..database import get_db
 from ..models import Booking, User, CalendarConnection, AvailabilityRule
 from ..schemas.booking import BookingCreate, BookingOut, BookingUpdate, BookingCancel
 from ..security import get_current_user
-from ..services import google_calendar, microsoft_calendar, email_service
+from ..services import google_calendar, microsoft_calendar, email_service, busy_times
 import uuid
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
@@ -91,6 +91,18 @@ async def create_booking(body: BookingCreate, bg_tasks: BackgroundTasks, db: Ses
 
     if _check_db_conflict(db, user.id, start_naive, end_naive):
         raise HTTPException(409, "Time slot already booked")
+
+    # Safety net. The availability page now subtracts the host's real calendar,
+    # but a stale page — or any direct API caller — can still post a slot that
+    # collides with an appointment already on it. Re-check against the live
+    # calendar at commit time. external_busy_periods never raises, so a calendar
+    # outage degrades to the DB-only check rather than blocking all bookings.
+    if busy_times.overlaps(
+        start_naive,
+        end_naive,
+        await busy_times.external_busy_periods(db, user, start_naive, end_naive),
+    ):
+        raise HTTPException(409, "That time is no longer available")
 
     booking = Booking(
         user_id=user.id,

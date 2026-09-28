@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import User, AvailabilityRule, Booking, CalendarConnection, WidgetCustomization
 from ..schemas.booking import BookingOut, BookingCancel
-from ..services import google_calendar, microsoft_calendar
+from ..services import google_calendar, microsoft_calendar, busy_times
 
 router = APIRouter(prefix="/public", tags=["public"])
 
@@ -68,9 +68,23 @@ async def public_availability(
     ).all()
     busy_periods = [(b.start_time, b.end_time) for b in db_bookings]
 
+    # Subtract the host's REAL calendar too. Previously only ScheduleLink's own
+    # bookings were considered, so the booking page offered times the host was
+    # already committed to. busy_times returns naive host-local periods, the
+    # same basis as Booking.start_time and the rule windows below.
+    busy_periods += await busy_times.external_busy_periods(
+        db,
+        user,
+        datetime.combine(start_date, dtime.min),
+        datetime.combine(end_date + timedelta(days=1), dtime.min),
+    )
+
     slots = []
     current = start_date
-    now = datetime.utcnow()
+    # Slots are naive host-local, so "now" has to be local as well. Comparing
+    # against datetime.utcnow() hid every slot inside the current UTC offset —
+    # for an America/New_York host that is the next four hours of the day.
+    now = datetime.now(busy_times.host_zone(user.timezone)).replace(tzinfo=None)
     while current <= end_date:
         # Python weekday(): Monday=0 ... Sunday=6 (matches our schema)
         windows = rules_by_day.get(current.weekday(), [])
